@@ -1,15 +1,18 @@
 import { useEstado, statusInfo } from "../lib/estado.js";
+import { useCompartilhado } from "../lib/compartilhado.js";
 
 export const SECOES = [
   { key: "hoje", label: "Hoje", ico: "◉" },
   { key: "demandas", label: "Kanban", ico: "≡" },
   { key: "central", label: "Central Guipa", ico: "◆" },
+  { key: "marcas", label: "Marcas", ico: "◑" },
   { key: "clientes", label: "Clientes", ico: "▧" },
   { key: "prompts", label: "Prompts", ico: "✦" },
 ];
 
 export default function Sidebar({ secao, aoTrocar }) {
   const estado = useEstado();
+  const compartilhado = useCompartilhado();
 
   /* Cartão em coluna de concluído não conta como pendente — é o que faz
      "Finalizadas" se comportar direito sem regra especial. */
@@ -18,6 +21,7 @@ export default function Sidebar({ secao, aoTrocar }) {
       return estado.demandas.filter((d) => !statusInfo(estado, d.status).concluida)
         .length;
     if (key === "prompts") return estado.prompts.length;
+    if (key === "marcas") return (compartilhado.marcas || []).length;
     if (key === "central") return estado.central.length;
     return 0;
   }

@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { useEstado, alterar, uid } from "../lib/estado.js";
 import {
+  useCompartilhado,
+  alterar as alterarCompartilhado,
+  uid as uidCompartilhado,
+  normaliza,
+} from "../lib/compartilhado.js";
+import { useAuth } from "../lib/useAuth.js";
+import {
   CATEGORIAS_PROMPT,
   categoriaPrompt,
   FERRAMENTAS_IA,
@@ -129,12 +136,152 @@ function FormPrompt({ inicial, aoFechar }) {
   );
 }
 
+
+/* A biblioteca e o balcao comum: qualquer um publica, qualquer um leva
+   uma copia para os prompts pessoais. Importar COPIA de proposito —
+   depois de importado o prompt e seu, e editar nao mexe no dos outros.
+   Referencia viva daria versionamento e conflito para um problema que
+   ninguem tem. */
+function Biblioteca({ aoFechar }) {
+  const compartilhado = useCompartilhado();
+  const estado = useEstado();
+  const [filtro, setFiltro] = useState("");
+  const [importados, setImportados] = useState([]);
+
+  const lista = (compartilhado.biblioteca || []).filter((p) =>
+    filtro
+      ? (p.titulo + " " + p.texto + " " + (p.tags || []).join(" "))
+          .toLowerCase()
+          .includes(filtro.toLowerCase())
+      : true
+  );
+
+  /* Ja tenho isto? Compara pelo titulo sem acento e sem maiuscula —
+     evita a pessoa importar o mesmo prompt tres vezes sem perceber. */
+  function jaTenho(p) {
+    return estado.prompts.some((x) => normaliza(x.titulo) === normaliza(p.titulo));
+  }
+
+  function importar(p) {
+    alterar((e) => ({
+      prompts: [
+        {
+          id: uid("p"),
+          titulo: p.titulo,
+          texto: p.texto,
+          tags: [...(p.tags || [])],
+          categoria: p.categoria || "outro",
+          ferramenta: p.ferramenta || "",
+          modelo: p.modelo || "",
+          favorito: false,
+          daBiblioteca: p.id,
+        },
+        ...e.prompts,
+      ],
+    }));
+    setImportados((v) => [...v, p.id]);
+  }
+
+  return (
+    <Modal titulo="Biblioteca de prompts" aoFechar={aoFechar} largo>
+      <div className="banner">
+        Prompts que o time publicou. Importar traz uma <b>copia</b> para os seus
+        — depois e seu, e editar nao afeta ninguem.{" "}
+        <b>Ainda nao esta ligado ao servidor</b>, entao por enquanto so aparece
+        o que foi publicado neste navegador.
+      </div>
+
+      <div className="field">
+        <input
+          type="text"
+          value={filtro}
+          placeholder="Buscar na biblioteca..."
+          onChange={(e) => setFiltro(e.target.value)}
+        />
+      </div>
+
+      {!lista.length ? (
+        <div className="empty">
+          {filtro
+            ? "Nada encontrado."
+            : "A biblioteca esta vazia. Publique um prompt pelo botao Publicar num card."}
+        </div>
+      ) : (
+        <div className="list">
+          {lista.map((p) => {
+            const cat = categoriaPrompt(p.categoria);
+            const tenho = jaTenho(p);
+            const acabouDeImportar = importados.includes(p.id);
+            return (
+              <div className="row" key={p.id} style={{ cursor: "default" }}>
+                <div className="bar" style={{ background: cat.cor }} />
+                <div className="body">
+                  <div className="ttl">{p.titulo}</div>
+                  <div className="meta">
+                    <span>{cat.label}</span>
+                    {p.ferramenta && <span>&#9655; {p.ferramenta}</span>}
+                    {p.criadoPor && <span>por {p.criadoPor}</span>}
+                  </div>
+                </div>
+                <div className="right">
+                  <button
+                    className={"btn sm" + (tenho || acabouDeImportar ? " ghost" : "")}
+                    type="button"
+                    disabled={acabouDeImportar}
+                    onClick={() => importar(p)}
+                  >
+                    {acabouDeImportar
+                      ? "importado"
+                      : tenho
+                      ? "importar de novo"
+                      : "Importar"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 export default function Prompts({ busca }) {
   const estado = useEstado();
+  const compartilhado = useCompartilhado();
+  const auth = useAuth();
   const [editando, setEditando] = useState(null);
   const [criando, setCriando] = useState(false);
   const [excluindo, setExcluindo] = useState(null);
   const [copiado, setCopiado] = useState("");
+  const [bibliotecaAberta, setBibliotecaAberta] = useState(false);
+  const [publicado, setPublicado] = useState("");
+
+  /* Publicar manda uma copia para o balcao comum. Republicar o mesmo
+     prompt atualiza o que esta la em vez de criar um segundo igual. */
+  function publicar(p) {
+    const existente = (compartilhado.biblioteca || []).find(
+      (x) => normaliza(x.titulo) === normaliza(p.titulo)
+    );
+    const alvo = {
+      id: existente?.id || uidCompartilhado("bp"),
+      titulo: p.titulo,
+      texto: p.texto,
+      tags: [...(p.tags || [])],
+      categoria: p.categoria || "outro",
+      ferramenta: p.ferramenta || "",
+      modelo: p.modelo || "",
+      criadoPor: auth.perfil?.email || "",
+      criadoEm: new Date().toISOString().slice(0, 10),
+    };
+    alterarCompartilhado((e) => ({
+      biblioteca: existente
+        ? e.biblioteca.map((x) => (x.id === alvo.id ? alvo : x))
+        : [alvo, ...e.biblioteca],
+    }));
+    setPublicado(p.id);
+    setTimeout(() => setPublicado(""), 1800);
+  }
 
   const lista = estado.prompts
     .filter((p) =>
@@ -194,11 +341,14 @@ export default function Prompts({ busca }) {
           );
         })}
         <button
-          className="btn primary sm"
+          className="btn sm"
           type="button"
           style={{ marginLeft: "auto" }}
-          onClick={() => setCriando(true)}
+          onClick={() => setBibliotecaAberta(true)}
         >
+          Biblioteca ({(compartilhado.biblioteca || []).length})
+        </button>
+        <button className="btn primary sm" type="button" onClick={() => setCriando(true)}>
           ＋ Novo prompt
         </button>
       </div>
@@ -260,6 +410,14 @@ export default function Prompts({ busca }) {
                   <button
                     className="btn sm ghost"
                     type="button"
+                    title="Mandar uma copia para a biblioteca do time"
+                    onClick={() => publicar(p)}
+                  >
+                    {publicado === p.id ? "publicado" : "Publicar"}
+                  </button>
+                  <button
+                    className="btn sm ghost"
+                    type="button"
                     onClick={() => setEditando(p)}
                   >
                     Editar
@@ -278,6 +436,7 @@ export default function Prompts({ busca }) {
         </div>
       )}
 
+      {bibliotecaAberta && <Biblioteca aoFechar={() => setBibliotecaAberta(false)} />}
       {criando && <FormPrompt aoFechar={() => setCriando(false)} />}
       {editando && (
         <FormPrompt inicial={editando} aoFechar={() => setEditando(null)} />

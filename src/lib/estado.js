@@ -49,6 +49,11 @@ export function semente() {
     filtroCat: "",
     filtroPromptCat: "",
     demandaVista: "quadro",
+    /* "pessoal" = o quadro de quem usa · "empresas" = o quadro de uma
+       marca, que e compartilhado. A escolha e preferencia de tela, entao
+       fica no estado pessoal mesmo quando o quadro olhado e do time. */
+    kanbanModo: "pessoal",
+    kanbanMarcaId: "",
     hojeOrdem: ["panorama", "prazos", "atalhos", "prompts"],
     centralAba: "materiais",
   };
