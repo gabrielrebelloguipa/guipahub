@@ -2,8 +2,7 @@ import { useState } from "react";
 import { useEstado, alterar, uid } from "../lib/estado.js";
 import {
   useCompartilhado,
-  alterar as alterarCompartilhado,
-  uid as uidCompartilhado,
+  publicarPrompt,
   normaliza,
 } from "../lib/compartilhado.js";
 import { useAuth } from "../lib/useAuth.js";
@@ -13,6 +12,7 @@ import {
   FERRAMENTAS_IA,
 } from "../lib/constantes.js";
 import Modal, { Confirmar } from "../componentes/Modal.jsx";
+import AvisoAlcance from "../componentes/AvisoAlcance.jsx";
 
 function FormPrompt({ inicial, aoFechar }) {
   const novo = !inicial;
@@ -184,12 +184,10 @@ function Biblioteca({ aoFechar }) {
 
   return (
     <Modal titulo="Biblioteca de prompts" aoFechar={aoFechar} largo>
-      <div className="banner">
-        Prompts que o time publicou. Importar traz uma <b>copia</b> para os seus
-        — depois e seu, e editar nao afeta ninguem.{" "}
-        <b>Ainda nao esta ligado ao servidor</b>, entao por enquanto so aparece
-        o que foi publicado neste navegador.
-      </div>
+      <AvisoAlcance>
+        Prompts que o time publicou. Importar traz uma <b>cópia</b> para os
+        seus — depois é seu, e editar não afeta ninguém.
+      </AvisoAlcance>
 
       <div className="field">
         <input
@@ -259,26 +257,9 @@ export default function Prompts({ busca }) {
 
   /* Publicar manda uma copia para o balcao comum. Republicar o mesmo
      prompt atualiza o que esta la em vez de criar um segundo igual. */
-  function publicar(p) {
-    const existente = (compartilhado.biblioteca || []).find(
-      (x) => normaliza(x.titulo) === normaliza(p.titulo)
-    );
-    const alvo = {
-      id: existente?.id || uidCompartilhado("bp"),
-      titulo: p.titulo,
-      texto: p.texto,
-      tags: [...(p.tags || [])],
-      categoria: p.categoria || "outro",
-      ferramenta: p.ferramenta || "",
-      modelo: p.modelo || "",
-      criadoPor: auth.perfil?.email || "",
-      criadoEm: new Date().toISOString().slice(0, 10),
-    };
-    alterarCompartilhado((e) => ({
-      biblioteca: existente
-        ? e.biblioteca.map((x) => (x.id === alvo.id ? alvo : x))
-        : [alvo, ...e.biblioteca],
-    }));
+  async function publicar(p) {
+    const r = await publicarPrompt(p, auth.perfil?.email || "");
+    if (!r.ok) { alert(r.erro); return; }
     setPublicado(p.id);
     setTimeout(() => setPublicado(""), 1800);
   }

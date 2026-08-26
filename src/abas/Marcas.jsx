@@ -1,8 +1,8 @@
 import { useState } from "react";
 import {
   useCompartilhado,
-  alterar,
-  uid,
+  salvarMarca,
+  excluirMarca,
   validarMarca,
   nichosConhecidos,
   quadroDaMarca,
@@ -10,6 +10,7 @@ import {
 import { useAuth } from "../lib/useAuth.js";
 import Modal, { Confirmar } from "../componentes/Modal.jsx";
 import CampoNicho from "../componentes/CampoNicho.jsx";
+import AvisoAlcance from "../componentes/AvisoAlcance.jsx";
 import { fmtData } from "../lib/constantes.js";
 
 const VAZIA = {
@@ -78,27 +79,26 @@ function FormMarca({ inicial, aoFechar }) {
     );
   }
 
-  function salvar() {
+  const [salvando, setSalvando] = useState(false);
+  const [erroSalvar, setErroSalvar] = useState("");
+
+  async function salvar() {
     setTentouSalvar(true);
     if (faltando.length) return;
 
     let site = m.site.trim();
     if (site && !/^https?:\/\//i.test(site)) site = "https://" + site;
 
-    const alvo = {
-      ...m,
-      site,
-      nome: m.nome.trim(),
-      nicho: m.nicho.trim(),
-      id: m.id || uid("m"),
-      criadoPor: m.criadoPor || auth.perfil?.email || "",
-      criadoEm: m.criadoEm || new Date().toISOString().slice(0, 10),
-    };
-    alterar((e) => ({
-      marcas: novo
-        ? [alvo, ...e.marcas]
-        : e.marcas.map((x) => (x.id === alvo.id ? alvo : x)),
-    }));
+    setSalvando(true);
+    setErroSalvar("");
+    const r = await salvarMarca(
+      { ...m, site, nome: m.nome.trim(), nicho: m.nicho.trim() },
+      auth.perfil?.email || ""
+    );
+    setSalvando(false);
+    /* O banco recusa nome repetido. Sem mostrar isso aqui, o modal
+       fecharia como se tivesse dado certo e a marca sumiria. */
+    if (!r.ok) { setErroSalvar(r.erro); return; }
     aoFechar();
   }
 
@@ -114,11 +114,16 @@ function FormMarca({ inicial, aoFechar }) {
               Falta preencher: {faltando.join(", ")}
             </div>
           )}
+          {erroSalvar && (
+            <div className="msg-erro" style={{ marginRight: "auto", marginTop: 0 }}>
+              {erroSalvar}
+            </div>
+          )}
           <button className="btn ghost" type="button" onClick={aoFechar}>
             Cancelar
           </button>
-          <button className="btn primary" type="button" onClick={salvar}>
-            Salvar
+          <button className="btn primary" type="button" onClick={salvar} disabled={salvando}>
+            {salvando ? "salvando..." : "Salvar"}
           </button>
         </>
       }
@@ -316,13 +321,10 @@ export default function Marcas({ busca }) {
 
   return (
     <>
-      <div className="banner">
-        <b>Cadastro compartilhado.</b> Marca criada aqui vale para o time inteiro —
-        é a mesma lista que alimenta os quadros por empresa.
-        {" "}
-        <b>Ainda não está ligado ao servidor</b>, então por enquanto o que você
-        cadastra fica só neste navegador.
-      </div>
+      <AvisoAlcance>
+        <b>Cadastro compartilhado.</b> Marca criada aqui vale para o time
+        inteiro — é a mesma lista que alimenta os quadros por empresa.
+      </AvisoAlcance>
 
       <div className="chips">
         <button
@@ -403,12 +405,7 @@ export default function Marcas({ busca }) {
       {excluindo && (
         <Confirmar
           mensagem={`Excluir a marca “${excluindo.nome}”? O quadro dela, se existir, some junto. Isso não tem volta.`}
-          aoConfirmar={() =>
-            alterar((e) => ({
-              marcas: e.marcas.filter((x) => x.id !== excluindo.id),
-              quadros: e.quadros.filter((q) => q.marcaId !== excluindo.id),
-            }))
-          }
+          aoConfirmar={() => excluirMarca(excluindo.id)}
           aoFechar={() => setExcluindo(null)}
         />
       )}

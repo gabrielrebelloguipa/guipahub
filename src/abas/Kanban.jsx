@@ -2,14 +2,13 @@ import { useMemo, useState } from "react";
 import { useEstado, alterar as alterarPessoal, pegarEstado, uid } from "../lib/estado.js";
 import {
   useCompartilhado,
-  pegar as pegarCompartilhado,
-  alterarQuadro,
   quadroDaMarca,
   criarQuadro,
-  uid as uidCompartilhado,
+  apiQuadroEmpresa,
 } from "../lib/compartilhado.js";
 import { useAuth } from "../lib/useAuth.js";
 import Quadro, { criarApi } from "../componentes/Quadro.jsx";
+import AvisoAlcance from "../componentes/AvisoAlcance.jsx";
 
 export default function Kanban({ busca }) {
   const estado = useEstado();
@@ -39,17 +38,13 @@ export default function Kanban({ busca }) {
     []
   );
 
-  const apiEmpresa = useMemo(() => {
-    if (!quadro) return null;
-    return criarApi(
-      () => {
-        const q = (pegarCompartilhado().quadros || []).find((x) => x.id === quadro.id);
-        return { listas: q?.listas || [], demandas: q?.demandas || [] };
-      },
-      (patch) => alterarQuadro(quadro.id, () => patch),
-      uidCompartilhado
-    );
-  }, [quadro?.id]);
+  /* As operacoes do quadro de empresa moram no compartilhado: elas
+     precisam saber falar SQL quando o Supabase estiver ligado, o que
+     o criarApi generico (que so troca objetos) nao faz. */
+  const apiEmpresa = useMemo(
+    () => (quadro ? apiQuadroEmpresa(quadro.id) : null),
+    [quadro?.id]
+  );
 
   return (
     <>
@@ -135,11 +130,10 @@ export default function Kanban({ busca }) {
         </div>
       ) : (
         <>
-          <div className="banner">
-            <b>Quadro de {marca.nome}.</b> É compartilhado: o que você mexer aqui
-            vale para o time. <b>Ainda não está ligado ao servidor</b>, então por
-            enquanto fica só neste navegador.
-          </div>
+          <AvisoAlcance>
+            <b>Quadro de {marca.nome}.</b> É compartilhado: o que você mexer
+            aqui vale para o time.
+          </AvisoAlcance>
           <Quadro
             listas={quadro.listas}
             demandas={quadro.demandas}

@@ -14,6 +14,17 @@
 export const CONFIG = {
   clientId: "",
   driveRaizId: "",
+
+  /* Supabase — Project Settings > API no painel do projeto.
+     Enquanto estiverem vazios, os dados compartilhados (marcas,
+     biblioteca de prompts, quadros por empresa) ficam no navegador de
+     cada um e NAO sao compartilhados de verdade. A interface avisa.
+
+     A anon key nao e segredo: ela vai dentro do JavaScript do site de
+     proposito. Quem protege o banco sao as politicas de acesso criadas
+     por supabase/schema.sql. */
+  supabaseUrl: "",
+  supabaseAnonKey: "",
 };
 
 export const DOMINIO_OK = "guipabrasil.com";

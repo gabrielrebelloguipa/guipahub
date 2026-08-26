@@ -11,6 +11,7 @@ import Prompts from "./abas/Prompts.jsx";
 import { useAuth } from "./lib/useAuth.js";
 import { restaurarSessao, pedirToken, temSessao } from "./lib/auth.js";
 import { verificarAcesso } from "./lib/drive.js";
+import { iniciar as iniciarCompartilhado } from "./lib/compartilhado.js";
 import { DIAS, MESES } from "./lib/constantes.js";
 
 const TITULOS = {
@@ -35,6 +36,13 @@ export default function App() {
     restaurarSessao();
     if (temSessao()) pedirToken(true, null);
   }, []);
+
+  /* Carrega os dados compartilhados uma vez, depois de ter sessao —
+     sem sessao o banco recusa tudo, entao pedir antes seria uma ida
+     garantida a lugar nenhum. */
+  useEffect(() => {
+    if (auth.perfil) iniciarCompartilhado();
+  }, [auth.perfil?.email]);
 
   /* A verificação de acesso ao Drive mora aqui, e não dentro do auth,
      porque auth não deve conhecer o Drive — senão os dois se importam em
