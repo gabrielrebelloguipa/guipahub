@@ -254,7 +254,7 @@ https://guipahub.onrender.com
 
 > **Cuidado com três coisas:** `http` no localhost e `https` no Render (não troque); **sem barra no final**; e sem `/index.html` ou qualquer caminho — é só o endereço base.
 
-**4.15 NÃO preencher "URIs de redirecionamento autorizados".** Deixe vazio. Este fluxo não usa, e preencher errado causa erro.
+**4.15 "URIs de redirecionamento autorizados": deixe vazio POR ENQUANTO.** Você volta aqui na Parte 7 para colar a callback do Supabase — que ainda não existe neste ponto do guia.
 
 **4.16** **Criar**
 
@@ -298,6 +298,33 @@ git add -A && git commit -m "Client ID do Google" && git push
 O Render vê o push e refaz o deploy sozinho em ~2 minutos. Não precisa mexer no painel dele.
 
 **✅ Confira:** abrir `https://guipahub.onrender.com` e fazer login. Agora é o site de verdade, que o time vai usar.
+
+---
+
+## Parte 5.5 — Supabase (o banco compartilhado)
+
+Marcas, biblioteca de prompts e quadros por empresa são de todo mundo — e
+dado compartilhado precisa de um lugar fora do navegador.
+
+O passo a passo completo está em **`supabase/LEIA-ME.md`**. O resumo da
+ordem, que é a parte confusa:
+
+1. Criar o projeto no Supabase → ele te dá uma **Callback URL**
+2. Rodar `supabase/schema.sql` no SQL Editor (cria as tabelas **e** as
+   regras de acesso — não pule as regras)
+3. Voltar ao Google Cloud e colar essa callback em **URIs de
+   redirecionamento autorizados** (o campo que você deixou vazio no 4.15)
+4. No Supabase, ligar o provedor Google com o Client ID **e** o Client
+   Secret
+5. Me mandar o **Project URL** e a **anon key**
+
+> **O login muda de dono.** Passa a ser o Supabase que emite a sessão, e
+> não mais o Google direto. Para quem usa não muda nada — continua
+> "Entrar com Google" com a conta da GUIPA. Muda porque o banco precisa
+> saber quem está chamando para decidir o que cada um pode ler.
+
+> **O Client Secret é segredo de verdade**, diferente do Client ID. Ele
+> fica guardado no Supabase e nunca no código do site.
 
 ---
 
