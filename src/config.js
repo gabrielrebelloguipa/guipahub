@@ -12,7 +12,7 @@
    enxergue no Drive. Preenchido, só acha o que descer dessa pasta. O id
    está na URL da pasta no Drive, depois de /folders/. */
 export const CONFIG = {
-  clientId: "",
+  clientId: "456829931509-4n1jdkj2i2aco1hp1slqruipv8jp477m.apps.googleusercontent.com",
   driveRaizId: "",
 
   /* Supabase — Project Settings > API no painel do projeto.
@@ -23,8 +23,11 @@ export const CONFIG = {
      A anon key nao e segredo: ela vai dentro do JavaScript do site de
      proposito. Quem protege o banco sao as politicas de acesso criadas
      por supabase/schema.sql. */
-  supabaseUrl: "",
-  supabaseAnonKey: "",
+  supabaseUrl: "https://zwoocakjmvqinllyyczh.supabase.co",
+  /* Chamada de "publishable key" no painel novo do Supabase (era
+     "anon key"). E publica por design: vai dentro do JavaScript do
+     site. Quem protege o banco sao as politicas de RLS. */
+  supabaseAnonKey: "sb_publishable_yYhF9c_WqHfv_DtlPYT9DA_pRk6CnNA",
 };
 
 export const DOMINIO_OK = "guipabrasil.com";

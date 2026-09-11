@@ -1,31 +1,29 @@
-/* Login com conta @guipabrasil.com, sem servidor.
+/* Login com conta @guipabrasil.com, via Supabase Auth + provedor Google.
 
-   Por que sem backend: o Workspace já é a fonte de verdade. Cada pessoa
-   entra com a conta dela, o site recebe um token DAQUELA pessoa e lê o
-   Drive como ela. Não existe conta de serviço, senha guardada nem login
-   de ninguém embutido no código — se quem montou o site sair da empresa,
-   o site continua de pé.
+   Por que o Supabase emite a sessão, e não o Google direto: existe banco
+   compartilhado agora, e o Postgres precisa saber QUEM está chamando para
+   decidir o que cada um lê e escreve. Um token que só o navegador entende
+   não serve para isso — as políticas de RLS leem o e-mail de dentro do
+   token do Supabase.
 
-   Consequência boa e deliberada: a permissão é a do Drive. Quem não
-   enxerga a pasta de um cliente lá não enxerga aqui.
+   O acesso ao Drive continua sendo do Google: o Supabase devolve o
+   `provider_token` junto com a sessão, e é ele que vai no Authorization
+   das chamadas ao Drive.
 
-   Este arquivo não sabe que existe React. Ele mantém um estado e avisa
-   quem estiver ouvindo — o componente se conecta por useSyncExternalStore.
-   Foi feito assim de propósito: é a camada que menos deve mudar se um dia
-   a interface for reescrita de novo. */
+   ⚠ Assimetria que vale saber: o Supabase renova a sessão DELE sozinho,
+   mas NÃO renova o provider_token do Google — esse vence em ~1h. Quando
+   isso acontece, a aba Clientes pede para entrar de novo. O resto do app
+   continua funcionando normalmente, porque só o Drive depende dele.
 
-import { CONFIG, DOMINIO_OK } from "../config.js";
+   A interface deste arquivo é a mesma de antes (pedirToken, comToken,
+   sair, useAuth…), de propósito: os cinco arquivos que dependem dele não
+   mudaram uma linha. */
 
-const GSI_SRC = "https://accounts.google.com/gsi/client";
-const ESCOPO =
-  "openid email profile https://www.googleapis.com/auth/drive.readonly";
-const SESSAO_KEY = "guipahub_sessao";
-const CLIENT_ID_KEY = "guipahub_client_id";
-/* A biblioteca do Google nem sempre chama o callback de volta quando o
-   pedido silencioso falha (Client ID inválido, consentimento revogado).
-   Sem um limite, a pessoa ficaria clicando sem entender por que nada
-   acontece. */
-const LIMITE_SILENCIOSO = 8000;
+import { DOMINIO_OK } from "../config.js";
+import { supabase, temSupabase } from "./supabase.js";
+
+const ESCOPOS_DRIVE = "https://www.googleapis.com/auth/drive.readonly";
+const PROVIDER_TOKEN_KEY = "guipahub_provider_token";
 
 /* ---------- estado observável ---------- */
 
@@ -34,12 +32,11 @@ let estado = {
   entrando: false,
   erro: "",
   /* null = ainda não verificado · true = lê o Drive · false = entrou mas
-     não autorizou o Drive (dá para negar só esse acesso na tela do Google) */
+     o acesso ao Drive não veio junto */
   acessoDrive: null,
   verificando: false,
-  /* a sessão caiu no meio do uso e a renovação silenciosa não resolveu */
+  /* o token do Google venceu e a renovação não resolveu */
   expirou: false,
-  clientId: CONFIG.clientId || lerClientIdLocal(),
 };
 
 const ouvintes = new Set();
@@ -56,43 +53,47 @@ function mudar(patch) {
   ouvintes.forEach((fn) => fn());
 }
 
-/* ---------- o que não é estado de tela ---------- */
+/* ---------- token do Google (fora do estado de tela) ---------- */
 
-/* Token e temporizador ficam fora do estado observável: mudam sozinhos e
-   não têm nada a ver com o que é desenhado. Se entrassem lá, cada
-   renovação de token redesenharia a aplicação inteira à toa. */
-let token = "";
-let expiraEm = 0;
-let tokenClient = null;
-let aoAutenticar = null;
-let limite = 0;
+/* Fica fora do estado observável: muda sozinho e não tem nada a ver com
+   o que é desenhado. Se entrasse lá, cada renovação redesenharia o app. */
+let providerToken = lerProviderToken();
 
-export function temSessao() {
-  return !!estado.perfil;
-}
-export function tokenValido() {
-  return !!token && Date.now() < expiraEm - 60000;
-}
-export function pegarToken() {
-  return token;
-}
-
-function lerClientIdLocal() {
+function lerProviderToken() {
   try {
-    return localStorage.getItem(CLIENT_ID_KEY) || "";
+    return sessionStorage.getItem(PROVIDER_TOKEN_KEY) || "";
   } catch {
     return "";
   }
 }
-export function definirClientId(valor) {
-  const v = String(valor || "").trim();
+
+/* sessionStorage e não localStorage: o token do Drive morre quando a aba
+   fecha, que é o comportamento certo para credencial de curta duração. */
+function guardarProviderToken(t) {
+  providerToken = t || "";
   try {
-    localStorage.setItem(CLIENT_ID_KEY, v);
+    if (t) sessionStorage.setItem(PROVIDER_TOKEN_KEY, t);
+    else sessionStorage.removeItem(PROVIDER_TOKEN_KEY);
   } catch {
-    /* navegador sem localStorage: vale só nesta sessão */
+    /* sem sessionStorage o token vale só enquanto a página estiver aberta */
   }
-  tokenClient = null; /* client id novo exige cliente novo */
-  mudar({ clientId: v, erro: "" });
+}
+
+export function pegarToken() {
+  return providerToken;
+}
+export function temSessao() {
+  return !!estado.perfil;
+}
+export function tokenValido() {
+  return !!providerToken;
+}
+
+export function marcarVerificando(v) {
+  mudar({ verificando: v });
+}
+export function marcarAcessoDrive(v) {
+  mudar({ acessoDrive: v });
 }
 
 function iniciaisDe(nome, email) {
@@ -103,41 +104,79 @@ function iniciaisDe(nome, email) {
   return (a + b).toUpperCase();
 }
 
-/* Só o perfil é persistido, nunca o token: token de acesso vale 1h e
-   guardar credencial em localStorage é pedir para vazar. Na volta, o
-   Google devolve um token novo sem popup se o consentimento ainda vale —
-   é isso que faz o "deixar logado" acontecer. */
-function salvarSessao(perfil) {
-  try {
-    localStorage.setItem(SESSAO_KEY, JSON.stringify(perfil));
-  } catch {
-    /* sem persistência: a sessão vale só até fechar a aba */
-  }
-}
-export function restaurarSessao() {
-  try {
-    const p = JSON.parse(localStorage.getItem(SESSAO_KEY) || "null");
-    if (p && p.email) mudar({ perfil: p });
-  } catch {
-    /* json corrompido: começa deslogado, sem drama */
-  }
+function perfilDaSessao(sessao) {
+  const u = sessao?.user;
+  if (!u) return null;
+  const email = String(u.email || "").toLowerCase();
+  const nome = u.user_metadata?.full_name || u.user_metadata?.name || email;
+  return {
+    nome,
+    email,
+    foto: u.user_metadata?.avatar_url || "",
+    iniciais: iniciaisDe(nome, email),
+  };
 }
 
-export function sair() {
-  if (token) {
-    try {
-      window.google?.accounts?.oauth2?.revoke(token, () => {});
-    } catch {
-      /* revogar é cortesia; o que importa é esquecer o token aqui */
-    }
+/* ---------- entrar e sair ---------- */
+
+export async function pedirToken(silencioso, depois) {
+  if (!temSupabase()) {
+    mudar({ erro: "Supabase não configurado. Preencha src/config.js." });
+    return;
   }
-  token = "";
-  expiraEm = 0;
-  clearTimeout(limite);
+
+  /* No silencioso não se abre janela nenhuma: só se olha se já existe
+     sessão. É o caminho de quem reabre o site já logado. */
+  if (silencioso) {
+    const { data } = await supabase.auth.getSession();
+    if (data?.session) {
+      aplicarSessao(data.session);
+      if (depois) depois();
+    } else if (estado.perfil) {
+      mudar({ expirou: true });
+    }
+    return;
+  }
+
+  mudar({ entrando: true, erro: "" });
+
+  /* `hd` restringe o seletor de contas ao domínio, e `prompt: consent`
+     garante que a autorização do Drive seja pedida de novo quando o
+     provider_token tiver vencido. */
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      scopes: ESCOPOS_DRIVE,
+      queryParams: { hd: DOMINIO_OK, prompt: "consent", access_type: "offline" },
+      redirectTo: window.location.origin,
+    },
+  });
+
+  if (error) {
+    mudar({ entrando: false, erro: "Não consegui abrir o login: " + error.message });
+  }
+  /* Sem erro, o navegador sai da página para o Google e volta depois —
+     quem trata a volta é o onAuthStateChange lá embaixo. */
+}
+
+export function comToken(fn) {
+  if (tokenValido()) {
+    if (estado.expirou) mudar({ expirou: false });
+    fn();
+    return;
+  }
+  /* Sem token do Drive não adianta tentar renovar em silêncio: o Supabase
+     não renova provider_token. Marca como expirado e deixa a interface
+     oferecer o botão de entrar de novo. */
+  mudar({ expirou: true });
+}
+
+export async function sair() {
+  guardarProviderToken("");
   try {
-    localStorage.removeItem(SESSAO_KEY);
+    await supabase?.auth.signOut();
   } catch {
-    /* nada a fazer */
+    /* mesmo falhando o signOut remoto, a sessão local já foi embora */
   }
   mudar({
     perfil: null,
@@ -148,170 +187,54 @@ export function sair() {
   });
 }
 
-/* ---------- biblioteca do Google ---------- */
+/* ---------- a volta do Google ---------- */
 
-function carregarGsi() {
-  return new Promise((ok, falha) => {
-    if (window.google?.accounts?.oauth2) return ok();
-    const existente = document.getElementById("gsiScript");
-    if (existente) {
-      existente.addEventListener("load", () => ok());
-      existente.addEventListener("error", () => falha(new Error("gsi")));
-      return;
-    }
-    const s = document.createElement("script");
-    s.id = "gsiScript";
-    s.src = GSI_SRC;
-    s.async = true;
-    s.defer = true;
-    s.onload = () => ok();
-    s.onerror = () => falha(new Error("gsi"));
-    document.head.appendChild(s);
-  });
-}
+/* O domínio é conferido aqui, depois de saber quem entrou de fato — o
+   `hd` do Google é dica para o seletor de contas, não garantia. A trava
+   dura é a tela de consentimento estar como "Interno"; isto aqui existe
+   para dar uma mensagem clara em vez de um erro de banco. */
+function aplicarSessao(sessao) {
+  const perfil = perfilDaSessao(sessao);
+  if (!perfil) return;
 
-/* Um pedido de token por vez. Sem isto, o StrictMode do React (que
-   monta o efeito duas vezes em desenvolvimento) dispararia dois pedidos
-   ao Google e abriria dois popups. */
-let pedidoEmVoo = false;
-
-/* silencioso = tenta sem popup, para reabrir o site já logado. */
-export async function pedirToken(silencioso, depois) {
-  const cid = estado.clientId;
-  if (!cid) {
-    mudar({ erro: "Falta o Client ID do Google." });
-    return;
-  }
-  if (pedidoEmVoo) return;
-  pedidoEmVoo = true;
-  aoAutenticar = depois || null;
-
-  try {
-    await carregarGsi();
-  } catch {
-    pedidoEmVoo = false;
-    mudar({
-      entrando: false,
-      erro: "Não consegui carregar o login do Google. Verifique a conexão.",
-    });
-    return;
-  }
-
-  if (!tokenClient) {
-    tokenClient = window.google.accounts.oauth2.initTokenClient({
-      client_id: cid,
-      scope: ESCOPO,
-      /* hd é dica para o seletor de contas, não garantia: dá para ignorar
-         e escolher outra conta. O domínio é conferido de novo depois. */
-      hd: DOMINIO_OK,
-      callback: (resp) => {
-        pedidoEmVoo = false;
-        clearTimeout(limite);
-        if (resp.error) {
-          /* Falhar em silêncio é esperado quando o consentimento venceu.
-             Quem já tinha perfil precisa saber que caiu. */
-          if (silencioso) mudar({ entrando: false, expirou: !!estado.perfil });
-          else
-            mudar({
-              entrando: false,
-              erro: "Login cancelado ou negado pelo Google.",
-            });
-          return;
-        }
-        token = resp.access_token;
-        expiraEm = Date.now() + (Number(resp.expires_in) || 3600) * 1000;
-        mudar({ entrando: false, expirou: false });
-        confirmarConta();
-      },
-    });
-  }
-
-  if (!silencioso) mudar({ entrando: true, erro: "" });
-
-  const pedido = { prompt: silencioso ? "" : "consent" };
-  if (estado.perfil) pedido.hint = estado.perfil.email;
-
-  if (silencioso) {
-    clearTimeout(limite);
-    limite = setTimeout(() => {
-      pedidoEmVoo = false;
-      if (!tokenValido() && estado.perfil) mudar({ expirou: true });
-    }, LIMITE_SILENCIOSO);
-  }
-
-  tokenClient.requestAccessToken(pedido);
-}
-
-/* O domínio é conferido aqui, depois de saber quem entrou de fato — e não
-   pelo hd, que é só uma dica para o seletor de contas do Google. */
-async function confirmarConta() {
-  let u;
-  try {
-    const r = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-      headers: { Authorization: "Bearer " + token },
-    });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    u = await r.json();
-  } catch (e) {
-    mudar({ entrando: false, erro: "Não consegui confirmar a conta: " + e.message });
-    return;
-  }
-
-  const email = String(u.email || "").toLowerCase();
-  if (!email.endsWith("@" + DOMINIO_OK)) {
-    try {
-      window.google?.accounts?.oauth2?.revoke(token, () => {});
-    } catch {
-      /* idem */
-    }
-    token = "";
-    expiraEm = 0;
-    try {
-      localStorage.removeItem(SESSAO_KEY);
-    } catch {
-      /* nada a fazer */
-    }
+  if (!perfil.email.endsWith("@" + DOMINIO_OK)) {
+    supabase.auth.signOut();
+    guardarProviderToken("");
     mudar({
       perfil: null,
       entrando: false,
       erro:
-        (email ? `A conta ${email} não é` : "Essa conta não é") +
-        ` do domínio @${DOMINIO_OK}. Entre com o seu e-mail da GUIPA.`,
+        `A conta ${perfil.email} não é do domínio @${DOMINIO_OK}. ` +
+        "Entre com o seu e-mail da GUIPA.",
     });
     return;
   }
 
-  const perfil = {
-    nome: u.name || email,
-    email,
-    foto: u.picture || "",
-    iniciais: iniciaisDe(u.name, email),
-  };
-  salvarSessao(perfil);
-  mudar({ perfil, erro: "", expirou: false });
+  if (sessao.provider_token) guardarProviderToken(sessao.provider_token);
 
-  const seguir = aoAutenticar;
-  aoAutenticar = null;
-  if (seguir) seguir();
+  mudar({
+    perfil,
+    entrando: false,
+    erro: "",
+    expirou: !providerToken,
+  });
 }
 
-/* Garante um token válido antes de qualquer chamada ao Drive. */
-export function comToken(fn) {
-  if (tokenValido()) {
-    if (estado.expirou) mudar({ expirou: false });
-    fn();
-    return;
-  }
-  pedirToken(true, fn);
-}
+export function restaurarSessao() {
+  if (!temSupabase()) return;
 
-/* auth NÃO importa drive: drive já importa auth, e o par circular só se
-   sustentava com import dinâmico — que o bundler avisa que não consegue
-   separar. Em vez disso, auth expõe onde anotar o resultado, e quem sabe
-   falar com o Drive (drive.js) faz a pergunta e anota aqui. */
-export function marcarVerificando(v) {
-  mudar({ verificando: v });
-}
-export function marcarAcessoDrive(v) {
-  mudar({ acessoDrive: v });
+  supabase.auth.getSession().then(({ data }) => {
+    if (data?.session) aplicarSessao(data.session);
+  });
+
+  /* Dispara na volta do Google (SIGNED_IN), na renovação da sessão e no
+     logout. É por aqui que a sessão entra depois do redirecionamento. */
+  supabase.auth.onAuthStateChange((evento, sessao) => {
+    if (evento === "SIGNED_OUT") {
+      guardarProviderToken("");
+      mudar({ perfil: null, acessoDrive: null, expirou: false });
+      return;
+    }
+    if (sessao) aplicarSessao(sessao);
+  });
 }
