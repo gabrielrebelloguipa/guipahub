@@ -8,10 +8,18 @@ import Central from "./abas/Central.jsx";
 import Marcas from "./abas/Marcas.jsx";
 import Clientes from "./abas/Clientes.jsx";
 import Prompts from "./abas/Prompts.jsx";
+import Configuracoes from "./abas/Configuracoes.jsx";
 import { useAuth } from "./lib/useAuth.js";
 import { restaurarSessao, pedirToken, temSessao } from "./lib/auth.js";
 import { verificarAcesso } from "./lib/drive.js";
 import { iniciar as iniciarCompartilhado } from "./lib/compartilhado.js";
+import {
+  carregar as carregarPermissoes,
+  ouvir as ouvirPermissoes,
+  usePermissoes,
+  abasDe,
+} from "./lib/permissoes.js";
+import { definirRaiz } from "./lib/drive.js";
 import { DIAS, MESES } from "./lib/constantes.js";
 
 const TITULOS = {
@@ -21,6 +29,7 @@ const TITULOS = {
   marcas: ["Marcas", "Cadastro compartilhado — alimenta os quadros por empresa"],
   clientes: ["Clientes", "Busque o cliente e veja tudo que já foi feito para ele"],
   prompts: ["Prompts", "Os prompts que você reusa, prontos pra copiar"],
+  config: ["Configurações", "Permissões do time e de onde vem o acervo"],
 };
 
 export default function App() {
@@ -41,7 +50,10 @@ export default function App() {
      sem sessao o banco recusa tudo, entao pedir antes seria uma ida
      garantida a lugar nenhum. */
   useEffect(() => {
-    if (auth.perfil) iniciarCompartilhado();
+    if (!auth.perfil) return;
+    iniciarCompartilhado();
+    carregarPermissoes(auth.perfil.email);
+    ouvirPermissoes(auth.perfil.email);
   }, [auth.perfil?.email]);
 
   /* A verificação de acesso ao Drive mora aqui, e não dentro do auth,
@@ -51,6 +63,13 @@ export default function App() {
   useEffect(() => {
     if (auth.perfil) verificarAcesso();
   }, [auth.perfil?.email]);
+
+  /* A raiz do Drive vive no banco; o drive.js nao conhece o banco. O App,
+     que conhece os dois, faz a ponte sempre que a configuracao muda. */
+  const { drive: confDrive } = usePermissoes();
+  useEffect(() => {
+    definirRaiz(confDrive);
+  }, [confDrive.raizId, confDrive.somenteRaiz]);
 
   if (!auth.perfil) return <Login />;
 
@@ -83,6 +102,7 @@ export default function App() {
             {secao === "marcas" && <Marcas busca={busca} />}
             {secao === "clientes" && <Clientes busca={busca} />}
             {secao === "prompts" && <Prompts busca={busca} />}
+            {secao === "config" && <Configuracoes />}
           </div>
         </div>
       </div>

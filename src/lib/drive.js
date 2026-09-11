@@ -28,14 +28,21 @@ export const TETO_PASTAS = 200;
 
 const PASTA = "application/vnd.google-apps.folder";
 
+/* A raiz mora no banco (config_app), configurada pela aba
+   Configurações. O valor em config.js continua valendo como último
+   recurso — serve para um ambiente novo antes de alguém configurar. */
+let raizDoBanco = { raizId: "", somenteRaiz: false };
+
+export function definirRaiz(d) {
+  raizDoBanco = { raizId: d?.raizId || "", somenteRaiz: !!d?.somenteRaiz };
+}
+
 export function raizConfigurada() {
-  let local = "";
-  try {
-    local = localStorage.getItem("guipahub_drive_raiz") || "";
-  } catch {
-    /* sem localStorage: vale só o que está no config */
-  }
-  return CONFIG.driveRaizId || local;
+  /* Só filtra pela raiz quando alguém pediu explicitamente. Ter uma
+     raiz definida sem marcar a opção serve para o time saber onde o
+     acervo mora sem estreitar a busca. */
+  if (raizDoBanco.raizId && raizDoBanco.somenteRaiz) return raizDoBanco.raizId;
+  return CONFIG.driveRaizId || "";
 }
 
 /* Aspas e barras invertidas quebram a query do Drive — um cliente com
@@ -123,6 +130,30 @@ async function caminhoDe(f) {
     pais = p.parents;
   }
   return { texto: partes.join(" › "), ancestrais };
+}
+
+/* Mesma busca de pastas da aba Clientes, sem o filtro de raiz — a
+   tela de Configurações precisa achar a pasta que VAI virar a raiz,
+   e filtrar por ela aqui seria circular. */
+export function buscarPastas(termo) {
+  return comTokenAsync(async () => {
+    const r = await pedir("files", {
+      q:
+        `mimeType='${PASTA}' and trashed=false and name contains '` +
+        escapaQ(termo) +
+        "'",
+      fields: "files(id,name,parents)",
+      pageSize: 20,
+      orderBy: "name",
+    });
+    const lista = r.files || [];
+    const caminhos = await Promise.all(lista.map(caminhoDe));
+    return lista.map((f, i) => ({
+      id: f.id,
+      nome: f.name,
+      caminho: caminhos[i].texto,
+    }));
+  });
 }
 
 export function buscarClientes(termo) {

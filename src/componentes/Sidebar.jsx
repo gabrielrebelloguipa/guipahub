@@ -1,18 +1,24 @@
 import { useEstado, statusInfo } from "../lib/estado.js";
 import { useCompartilhado } from "../lib/compartilhado.js";
+import { usePermissoes, ABAS, abasDe } from "../lib/permissoes.js";
 
-export const SECOES = [
-  { key: "hoje", label: "Hoje", ico: "◉" },
-  { key: "demandas", label: "Kanban", ico: "≡" },
-  { key: "central", label: "Central Guipa", ico: "◆" },
-  { key: "marcas", label: "Marcas", ico: "◑" },
-  { key: "clientes", label: "Clientes", ico: "▧" },
-  { key: "prompts", label: "Prompts", ico: "✦" },
-];
+/* A lista canônica agora mora em permissoes.js, para a tela de
+   permissões e a sidebar nunca discordarem sobre quais abas existem. */
+export const SECOES = ABAS;
+
+export const ABA_CONFIG = { key: "config", label: "Configurações", ico: "⚙" };
 
 export default function Sidebar({ secao, aoTrocar }) {
   const estado = useEstado();
   const compartilhado = useCompartilhado();
+  const { eu, abasPadrao } = usePermissoes();
+
+  /* Configurações só aparece para admin. Não é tranca — é tirar da
+     frente de quem não tem o que fazer ali; o banco recusa a escrita
+     de quem não é admin de qualquer jeito. */
+  const visiveis = abasDe(eu, abasPadrao);
+  const lista = SECOES.filter((s) => visiveis.includes(s.key));
+  if (eu?.admin) lista.push(ABA_CONFIG);
 
   /* Cartão em coluna de concluído não conta como pendente — é o que faz
      "Finalizadas" se comportar direito sem regra especial. */
@@ -37,7 +43,7 @@ export default function Sidebar({ secao, aoTrocar }) {
       </div>
 
       <nav className="side-nav">
-        {SECOES.map((s) => {
+        {lista.map((s) => {
           const n = contagem(s.key);
           return (
             <button
