@@ -115,21 +115,35 @@ async function pastaPorId(id) {
   }
 }
 
-/* Sobe até 3 níveis para montar "Setor › Subsetor › Cliente". Três é de
-   propósito: é a profundidade da estrutura combinada, e subir sem limite
-   transformaria cada resultado numa fila de chamadas à API. */
+/* Sobe a árvore para duas coisas diferentes, que pedem alturas diferentes:
+   o texto "Setor › Subsetor › Cliente" (3 níveis bastam, mais que isso só
+   polui a linha) e a lista de ancestrais, que o filtro de raiz usa.
+
+   A lista precisa subir mais alto. Hoje o acervo mora em
+   GUIPA COMERCIAL › 01. GUIPA - REDE › 07. Design › Setor › Subsetor ›
+   Cliente: do cliente até a raiz são exatamente 3 saltos. Parar em 3
+   funcionaria por sorte, e qualquer pasta a mais no meio faria a busca
+   devolver vazio sem explicar por quê. Subir até 6 dá folga.
+
+   O custo é baixo porque pastaPorId tem cache: setor e subsetor se
+   repetem em todos os resultados e são lidos uma vez só. */
+const ALTURA_CAMINHO = 3;
+const ALTURA_ANCESTRAIS = 6;
+
 async function caminhoDe(f) {
   const partes = [];
   const ancestrais = [];
   let pais = f.parents;
-  for (let nivel = 0; nivel < 3 && pais?.length; nivel++) {
+  for (let nivel = 0; nivel < ALTURA_ANCESTRAIS && pais?.length; nivel++) {
     const p = await pastaPorId(pais[0]);
     if (!p) break;
     partes.unshift(p.name);
     ancestrais.push(p.id);
     pais = p.parents;
   }
-  return { texto: partes.join(" › "), ancestrais };
+  /* partes vai do mais alto ao mais próximo; o breadcrumb quer os
+     vizinhos imediatos, não o topo do drive compartilhado. */
+  return { texto: partes.slice(-ALTURA_CAMINHO).join(" › "), ancestrais };
 }
 
 /* Mesma busca de pastas da aba Clientes, sem o filtro de raiz — a
