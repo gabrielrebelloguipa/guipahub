@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAuth } from "../lib/useAuth.js";
 import {
   usePermissoes,
@@ -185,9 +185,6 @@ function ConfigDrive({ ehAdmin, meuEmail }) {
   const [achados, setAchados] = useState(null);
   const [buscando, setBuscando] = useState(false);
   const [erro, setErro] = useState("");
-  const [rascunho, setRascunho] = useState(drive);
-
-  useEffect(() => setRascunho(drive), [drive.raizId, drive.somenteRaiz]);
 
   async function procurar() {
     const t = termo.trim();
@@ -212,10 +209,10 @@ function ConfigDrive({ ehAdmin, meuEmail }) {
   return (
     <>
       <div className="banner">
-        <b>De onde a aba Clientes puxa as pastas.</b> Sem raiz definida, a busca
-        varre tudo que a pessoa enxerga no Drive. Com raiz, só o que estiver
-        dentro dela — útil quando o nome de um cliente também aparece em pasta
-        que não é acervo.
+        <b>De onde a aba Clientes lê o acervo.</b> A aba só enxerga o que
+        estiver dentro desta pasta, em qualquer profundidade — nunca nada fora
+        dela. Sem uma pasta escolhida aqui, a aba Clientes não tem onde
+        procurar, e avisa isso para quem abrir.
       </div>
 
       {erro && (
@@ -301,30 +298,6 @@ function ConfigDrive({ ehAdmin, meuEmail }) {
         )}
       </div>
 
-      <div className="card" style={{ marginTop: 14 }}>
-        <div className="card-h">
-          <div className="t">Como a busca de cliente se comporta</div>
-        </div>
-        <label className={"chip" + (rascunho.somenteRaiz ? " on" : "")} style={{ cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={!!rascunho.somenteRaiz}
-            disabled={!ehAdmin || !drive.raizId}
-            onChange={(e) => {
-              const novo = { ...rascunho, somenteRaiz: e.target.checked };
-              setRascunho(novo);
-              gravar(novo);
-            }}
-            style={{ marginRight: 6 }}
-          />
-          <span>Só achar pastas que estejam dentro da raiz</span>
-        </label>
-        <div className="sub" style={{ marginTop: 8 }}>
-          {drive.raizId
-            ? "Desmarcado, a busca acha qualquer pasta que a pessoa enxergue no Drive."
-            : "Precisa de uma raiz definida acima para valer."}
-        </div>
-      </div>
     </>
   );
 }

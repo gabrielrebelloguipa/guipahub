@@ -1,9 +1,19 @@
-/* Leitura do Google Drive com o token de quem está logado.
+/* Leitura do acervo de imagens no Google Drive, com o token de quem está
+   logado.
+
+   A REGRA DESTE ARQUIVO: tudo acontece dentro da pasta raiz configurada em
+   Configurações › Drive. O app desce a partir dela e nunca sai. Não existe
+   busca "no Drive inteiro" aqui — se a raiz não estiver configurada, a aba
+   Clientes avisa e não mostra nada, porque sem raiz ela não saberia onde o
+   acervo começa.
+
+   A única exceção é buscarPastas(), usada pela própria tela de
+   Configurações para ESCOLHER a raiz. Filtrar pela raiz ali seria circular.
 
    Não guarda arquivo em lugar nenhum: lê o Drive na hora. É o que faz
-   vídeo ser possível (não caberia em banco de navegador) e o que faz o
-   espaço não acabar. Também é o que mantém a permissão sendo a do Drive,
-   sem um segundo sistema de permissão para manter.
+   vídeo ser possível (não caberia em banco de navegador) e o que mantém a
+   permissão sendo a do Drive, sem um segundo sistema de permissão para
+   manter.
 
    Como auth.js, este arquivo não sabe que existe React. */
 
@@ -21,28 +31,33 @@ const API = "https://www.googleapis.com/drive/v3/";
    compartilhados — que é justamente onde mora o acervo da empresa. */
 const COMUM = { supportsAllDrives: "true", includeItemsFromAllDrives: "true" };
 
+const PASTA = "application/vnd.google-apps.folder";
+
 /* Um acervo grande não pode virar centenas de chamadas. Quando o teto
    bate, a interface avisa em vez de fingir que terminou. */
 export const TETO_ARQUIVOS = 1500;
-export const TETO_PASTAS = 200;
+export const TETO_PASTAS = 300;
 
-const PASTA = "application/vnd.google-apps.folder";
+/* A estrutura real tem 12 níveis de profundidade. Subir a árvore com um
+   limite fixo pequeno descartaria arquivo legítimo lá do fundo; este teto
+   só existe para um ciclo de pastas não virar laço infinito. */
+const TETO_SUBIDA = 20;
 
-/* A raiz mora no banco (config_app), configurada pela aba
-   Configurações. O valor em config.js continua valendo como último
-   recurso — serve para um ambiente novo antes de alguém configurar. */
-let raizDoBanco = { raizId: "", somenteRaiz: false };
+/* A raiz mora no banco (config_app), configurada pela aba Configurações.
+   O valor em config.js continua valendo como último recurso — serve para
+   um ambiente novo antes de alguém configurar. */
+let raizDoBanco = { raizId: "", raizNome: "" };
 
 export function definirRaiz(d) {
-  raizDoBanco = { raizId: d?.raizId || "", somenteRaiz: !!d?.somenteRaiz };
+  raizDoBanco = { raizId: d?.raizId || "", raizNome: d?.raizNome || "" };
 }
 
 export function raizConfigurada() {
-  /* Só filtra pela raiz quando alguém pediu explicitamente. Ter uma
-     raiz definida sem marcar a opção serve para o time saber onde o
-     acervo mora sem estreitar a busca. */
-  if (raizDoBanco.raizId && raizDoBanco.somenteRaiz) return raizDoBanco.raizId;
-  return CONFIG.driveRaizId || "";
+  return raizDoBanco.raizId || CONFIG.driveRaizId || "";
+}
+
+export function nomeDaRaiz() {
+  return raizDoBanco.raizNome || "Acervo";
 }
 
 /* Aspas e barras invertidas quebram a query do Drive — um cliente com
@@ -78,8 +93,7 @@ async function pedir(recurso, params) {
 
 /* Uma pergunta barata ao Drive logo depois de entrar, só para saber se o
    acesso foi mesmo concedido. Sem isso a pessoa só descobriria o problema
-   na primeira busca, e leria "HTTP 403" sem ideia do que fazer.
-   pageSize=1 e fields mínimo: a menor pergunta possível. */
+   na primeira busca, e leria "HTTP 403" sem ideia do que fazer. */
 export async function verificarAcesso() {
   marcarVerificando(true);
   try {
@@ -100,8 +114,15 @@ function comTokenAsync(fn) {
   });
 }
 
-/* ---------- pastas ---------- */
+const CAMPOS_ARQ =
+  "id,name,mimeType,thumbnailLink,webViewLink,size,modifiedTime,parents";
 
+/* ---------- cache de pastas ---------- */
+
+/* Guarda id → {id, name, parents}. Serve para montar a trilha de
+   navegação e para decidir se um resultado de busca está dentro da raiz,
+   sem repetir chamada: setor e subsetor se repetem em todo resultado e
+   são lidos uma vez só. Vive enquanto a aba estiver aberta. */
 const cachePasta = new Map();
 
 async function pastaPorId(id) {
@@ -111,95 +132,168 @@ async function pastaPorId(id) {
     cachePasta.set(id, f);
     return f;
   } catch {
+    cachePasta.set(id, null);
     return null;
   }
 }
 
-/* Sobe a árvore para duas coisas diferentes, que pedem alturas diferentes:
-   o texto "Setor › Subsetor › Cliente" (3 níveis bastam, mais que isso só
-   polui a linha) e a lista de ancestrais, que o filtro de raiz usa.
+/* ---------- navegar ---------- */
 
-   A lista precisa subir mais alto. Hoje o acervo mora em
-   GUIPA COMERCIAL › 01. GUIPA - REDE › 07. Design › Setor › Subsetor ›
-   Cliente: do cliente até a raiz são exatamente 3 saltos. Parar em 3
-   funcionaria por sorte, e qualquer pasta a mais no meio faria a busca
-   devolver vazio sem explicar por quê. Subir até 6 dá folga.
-
-   O custo é baixo porque pastaPorId tem cache: setor e subsetor se
-   repetem em todos os resultados e são lidos uma vez só. */
-const ALTURA_CAMINHO = 3;
-const ALTURA_ANCESTRAIS = 6;
-
-async function caminhoDe(f) {
-  const partes = [];
-  const ancestrais = [];
-  let pais = f.parents;
-  for (let nivel = 0; nivel < ALTURA_ANCESTRAIS && pais?.length; nivel++) {
-    const p = await pastaPorId(pais[0]);
-    if (!p) break;
-    partes.unshift(p.name);
-    ancestrais.push(p.id);
-    pais = p.parents;
-  }
-  /* partes vai do mais alto ao mais próximo; o breadcrumb quer os
-     vizinhos imediatos, não o topo do drive compartilhado. */
-  return { texto: partes.slice(-ALTURA_CAMINHO).join(" › "), ancestrais };
+/* Um nível só: o que tem dentro desta pasta. É assim que a tela navega —
+   clicou, pede o andar de baixo. Nada de varrer a árvore inteira de
+   antemão: são 1265 pastas, e quase nenhuma interessa no momento. */
+export function listarFilhos(pastaId) {
+  return comTokenAsync(async () => {
+    const pastas = [];
+    const arquivos = [];
+    let pageToken;
+    do {
+      const r = await pedir("files", {
+        q: `'${escapaQ(pastaId)}' in parents and trashed=false`,
+        fields: `nextPageToken,files(${CAMPOS_ARQ})`,
+        pageSize: 200,
+        orderBy: "folder,name",
+        pageToken,
+      });
+      for (const f of r.files || []) {
+        if (f.mimeType === PASTA) {
+          cachePasta.set(f.id, { id: f.id, name: f.name, parents: f.parents });
+          pastas.push({ id: f.id, nome: f.name });
+        } else if (/^image\/|^video\//.test(f.mimeType)) {
+          arquivos.push(f);
+        }
+      }
+      pageToken = r.nextPageToken;
+    } while (pageToken);
+    return { pastas, arquivos };
+  });
 }
 
-/* Mesma busca de pastas da aba Clientes, sem o filtro de raiz — a
-   tela de Configurações precisa achar a pasta que VAI virar a raiz,
-   e filtrar por ela aqui seria circular. */
+/* A trilha "07. Design › Automóveis › Pneus › Bridgestone", do topo para
+   baixo. Para na raiz: o que está acima dela não é assunto do app. */
+export function trilhaAteRaiz(pastaId) {
+  return comTokenAsync(async () => {
+    const raiz = raizConfigurada();
+    const trilha = [];
+    let id = pastaId;
+    for (let i = 0; i < TETO_SUBIDA && id; i++) {
+      const p = await pastaPorId(id);
+      if (!p) break;
+      trilha.unshift({ id: p.id, nome: p.name });
+      if (p.id === raiz) break;
+      id = p.parents?.[0];
+    }
+    return trilha;
+  });
+}
+
+/* ---------- buscar ---------- */
+
+/* O Drive não sabe perguntar "descendente de X" — só sabe "filho direto
+   de X". Então a busca por nome roda no que a pessoa enxerga e cada
+   resultado é conferido subindo até a raiz.
+
+   Subir sem limite fixo é o ponto: a estrutura tem 12 níveis, e qualquer
+   número redondo escolhido a dedo descartaria arquivo legítimo do fundo
+   sem dizer por quê. O cache segura o custo — os ancestrais se repetem. */
+async function dentroDaRaiz(f, raiz) {
+  let id = f.parents?.[0];
+  for (let i = 0; i < TETO_SUBIDA && id; i++) {
+    if (id === raiz) return true;
+    const p = await pastaPorId(id);
+    if (!p) return false;
+    id = p.parents?.[0];
+  }
+  return false;
+}
+
+/* Busca por palavra dentro do acervo: devolve os arquivos e também as
+   pastas cujo nome casa, porque "bridgestone" tanto pode ser o que a
+   pessoa quer abrir quanto o nome dos arquivos lá dentro. */
+export function buscarNoAcervo(termo) {
+  return comTokenAsync(async () => {
+    const raiz = raizConfigurada();
+    if (!raiz) return { arquivos: [], pastas: [], semRaiz: true };
+
+    const t = escapaQ(termo);
+    const [rArq, rPas] = await Promise.all([
+      pedir("files", {
+        q:
+          `name contains '${t}' and trashed=false and ` +
+          `(mimeType contains 'image/' or mimeType contains 'video/')`,
+        fields: `files(${CAMPOS_ARQ})`,
+        pageSize: 200,
+        orderBy: "name",
+      }),
+      pedir("files", {
+        q: `name contains '${t}' and trashed=false and mimeType='${PASTA}'`,
+        fields: "files(id,name,parents)",
+        pageSize: 60,
+        orderBy: "name",
+      }),
+    ]);
+
+    const peneira = async (lista) => {
+      const dentro = await Promise.all(lista.map((f) => dentroDaRaiz(f, raiz)));
+      return lista.filter((_, i) => dentro[i]);
+    };
+
+    const pastas = await peneira(rPas.files || []);
+    for (const p of pastas) {
+      cachePasta.set(p.id, { id: p.id, name: p.name, parents: p.parents });
+    }
+
+    return {
+      arquivos: await peneira(rArq.files || []),
+      pastas: pastas.map((p) => ({ id: p.id, nome: p.name })),
+      semRaiz: false,
+    };
+  });
+}
+
+/* Mesma busca de pastas, SEM o filtro de raiz — a tela de Configurações
+   precisa achar a pasta que VAI virar a raiz, e filtrar por ela aqui
+   seria circular. É a única porta deste arquivo que olha fora da raiz. */
 export function buscarPastas(termo) {
   return comTokenAsync(async () => {
     const r = await pedir("files", {
-      q:
-        `mimeType='${PASTA}' and trashed=false and name contains '` +
-        escapaQ(termo) +
-        "'",
+      q: `mimeType='${PASTA}' and trashed=false and name contains '${escapaQ(termo)}'`,
       fields: "files(id,name,parents)",
       pageSize: 20,
       orderBy: "name",
     });
     const lista = r.files || [];
-    const caminhos = await Promise.all(lista.map(caminhoDe));
+    /* Mostra os dois ancestrais mais próximos só para a pessoa distinguir
+       pastas de mesmo nome. Não é navegação, é desempate. */
+    const caminhos = await Promise.all(
+      lista.map(async (f) => {
+        const partes = [];
+        let id = f.parents?.[0];
+        for (let i = 0; i < 2 && id; i++) {
+          const p = await pastaPorId(id);
+          if (!p) break;
+          partes.unshift(p.name);
+          id = p.parents?.[0];
+        }
+        return partes.join(" › ");
+      })
+    );
     return lista.map((f, i) => ({
       id: f.id,
       nome: f.name,
-      caminho: caminhos[i].texto,
+      caminho: caminhos[i],
     }));
   });
 }
 
-export function buscarClientes(termo) {
-  return comTokenAsync(async () => {
-    const r = await pedir("files", {
-      q:
-        `mimeType='${PASTA}' and trashed=false and name contains '` +
-        escapaQ(termo) +
-        "'",
-      fields: "files(id,name,parents)",
-      pageSize: 40,
-      orderBy: "name",
-    });
-    const lista = r.files || [];
-    const caminhos = await Promise.all(lista.map(caminhoDe));
-    const raiz = raizConfigurada();
-    return lista
-      .map((f, i) => ({
-        id: f.id,
-        nome: f.name,
-        caminho: caminhos[i].texto,
-        ancestrais: caminhos[i].ancestrais,
-      }))
-      /* Raiz configurada = só vale pasta que desce dela. Sem raiz, vale
-         tudo que a pessoa enxerga no Drive. */
-      .filter((c) => !raiz || c.ancestrais.includes(raiz));
-  });
-}
+/* ---------- varrer uma pasta inteira ---------- */
 
-/* Varre a pasta do cliente e tudo abaixo dela. O Drive não tem busca
-   recursiva: é um nível por chamada, então isto é uma fila de pastas a
-   visitar. */
+/* Tudo que é imagem ou vídeo abaixo desta pasta, em qualquer
+   profundidade. É o "ver tudo deste cliente": a pasta do cliente tem
+   Photoshop, Renders, Recursos, e ninguém quer clicar em cada uma.
+
+   O Drive não tem busca recursiva: é um nível por chamada, então isto é
+   uma fila de pastas a visitar. */
 export function listarMidias(pastaId) {
   return comTokenAsync(async () => {
     const achados = [];
@@ -212,9 +306,8 @@ export function listarMidias(pastaId) {
       let pageToken;
       do {
         const r = await pedir("files", {
-          q: `'${id}' in parents and trashed=false`,
-          fields:
-            "nextPageToken,files(id,name,mimeType,thumbnailLink,webViewLink,size,modifiedTime)",
+          q: `'${escapaQ(id)}' in parents and trashed=false`,
+          fields: `nextPageToken,files(${CAMPOS_ARQ})`,
           pageSize: 200,
           orderBy: "folder,name",
           pageToken,
@@ -227,12 +320,11 @@ export function listarMidias(pastaId) {
       } while (pageToken && achados.length < TETO_ARQUIVOS);
     }
 
-    return {
-      arquivos: achados,
-      truncado: fila.length > 0,
-    };
+    return { arquivos: achados, truncado: fila.length > 0 };
   });
 }
+
+/* ---------- arquivo ---------- */
 
 export function baixarBlob(f) {
   return comTokenAsync(async () => {

@@ -69,7 +69,7 @@ export default function App() {
   const { drive: confDrive } = usePermissoes();
   useEffect(() => {
     definirRaiz(confDrive);
-  }, [confDrive.raizId, confDrive.somenteRaiz]);
+  }, [confDrive.raizId, confDrive.raizNome]);
 
   if (!auth.perfil) return <Login />;
 

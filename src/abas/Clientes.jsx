@@ -1,8 +1,12 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../lib/useAuth.js";
 import { pedirToken } from "../lib/auth.js";
 import {
-  buscarClientes,
+  raizConfigurada,
+  nomeDaRaiz,
+  listarFilhos,
+  trilhaAteRaiz,
+  buscarNoAcervo,
   listarMidias,
   baixarBlob,
   ehVideo,
@@ -48,11 +52,7 @@ function AvisoDeAcesso() {
         Ela vale uma hora e o navegador não conseguiu renovar sozinho. Entrar de
         novo leva um clique e não perde nada.
         <div className="chips" style={{ marginTop: 10 }}>
-          <button
-            className="btn primary sm"
-            type="button"
-            onClick={() => pedirToken(false, null)}
-          >
+          <button className="btn primary sm" type="button" onClick={() => pedirToken(false, null)}>
             Entrar de novo
           </button>
         </div>
@@ -67,11 +67,7 @@ function AvisoDeAcesso() {
         de leitura do Drive ficou de fora — dá para desmarcar só ela. Sem essa
         permissão esta aba não tem o que mostrar.
         <div className="chips" style={{ marginTop: 10 }}>
-          <button
-            className="btn primary sm"
-            type="button"
-            onClick={() => pedirToken(false, null)}
-          >
+          <button className="btn primary sm" type="button" onClick={() => pedirToken(false, null)}>
             Autorizar o Drive
           </button>
         </div>
@@ -81,62 +77,160 @@ function AvisoDeAcesso() {
   return null;
 }
 
-function Galeria({ cliente, aoVoltar, busca }) {
-  const [carregando, setCarregando] = useState(true);
+/* ---------- peças de mídia ---------- */
+
+function Midia({ f, aoAbrir, aoCopiar, aoBaixar }) {
+  return (
+    <div className="midia">
+      <button className="midia-img" type="button" onClick={() => aoAbrir(f)}>
+        <img
+          src={miniatura(f, 400)}
+          alt={f.name}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={(e) => {
+            e.currentTarget.style.display = "none";
+          }}
+        />
+        {ehVideo(f) && <div className="midia-play">▶</div>}
+      </button>
+      <div className="midia-nome" title={f.name}>
+        {f.name}
+      </div>
+      <div className="midia-acoes">
+        {!ehVideo(f) && (
+          <button className="btn sm" type="button" onClick={() => aoCopiar(f)}>
+            Copiar
+          </button>
+        )}
+        <button className="btn sm ghost" type="button" onClick={() => aoBaixar(f)}>
+          Baixar
+        </button>
+        {f.webViewLink && (
+          <a className="btn sm ghost" href={f.webViewLink} target="_blank" rel="noopener">
+            Drive
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Visor({ f, aoFechar }) {
+  if (!f) return null;
+  return (
+    <div className="overlay" onClick={aoFechar}>
+      <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-h">
+          <div className="t">{f.name}</div>
+          <button className="btn sm ghost" type="button" onClick={aoFechar}>
+            ✕
+          </button>
+        </div>
+        {ehVideo(f) ? (
+          /* Vídeo toca pelo player do próprio Drive: transcodificar ou
+             servir o arquivo bruto seria baixar centenas de MB à toa. */
+          <iframe
+            src={urlPreview(f)}
+            title={f.name}
+            allow="autoplay"
+            style={{
+              width: "100%",
+              height: "60vh",
+              border: 0,
+              borderRadius: "var(--radius)",
+              background: "#000",
+            }}
+          />
+        ) : (
+          <img
+            src={miniatura(f, 1600)}
+            alt={f.name}
+            referrerPolicy="no-referrer"
+            style={{
+              maxWidth: "100%",
+              maxHeight: "60vh",
+              display: "block",
+              margin: "0 auto",
+              borderRadius: "var(--radius)",
+            }}
+          />
+        )}
+        <div className="sub" style={{ marginTop: 10 }}>
+          {f.mimeType}
+          {f.size ? " · " + fmtBytes(f.size) : ""}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- a aba ---------- */
+
+export default function Clientes({ busca }) {
+  const auth = useAuth();
+  const raiz = raizConfigurada();
+
+  /* Onde estamos agora. null = ainda não abriu nada, então vale a raiz. */
+  const [pastaId, setPastaId] = useState(raiz);
+  const [trilha, setTrilha] = useState([]);
+  const [conteudo, setConteudo] = useState(null);
+  const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
-  const [arquivos, setArquivos] = useState([]);
-  const [truncado, setTruncado] = useState(false);
-  const [filtro, setFiltro] = useState("tudo");
+
+  const [termo, setTermo] = useState("");
+  const [buscando, setBuscando] = useState(false);
+  const [achados, setAchados] = useState(null);
+
+  const [tudo, setTudo] = useState(null);
   const [aberto, setAberto] = useState(null);
 
+  /* Trocar a raiz em Configurações tem que devolver a navegação ao topo:
+     continuar numa pasta do acervo antigo mostraria o que não é mais
+     acervo. */
   useEffect(() => {
+    setPastaId(raiz);
+    setAchados(null);
+    setTudo(null);
+  }, [raiz]);
+
+  useEffect(() => {
+    if (!pastaId) return;
     let vivo = true;
     setCarregando(true);
     setErro("");
-    listarMidias(cliente.id)
-      .then((r) => {
+    setTudo(null);
+    Promise.all([listarFilhos(pastaId), trilhaAteRaiz(pastaId)])
+      .then(([c, t]) => {
         if (!vivo) return;
-        setArquivos(r.arquivos);
-        setTruncado(r.truncado);
+        setConteudo(c);
+        setTrilha(t);
       })
       .catch((e) => vivo && setErro(e.message || "erro ao ler a pasta"))
       .finally(() => vivo && setCarregando(false));
-    /* `vivo` evita gravar estado de um cliente que já foi trocado — sem
-       isso, voltar e abrir outro cliente rápido misturaria os resultados. */
+    /* `vivo` evita gravar o conteúdo de uma pasta que já foi trocada — sem
+       isso, clicar rápido em duas pastas misturaria os resultados. */
     return () => {
       vivo = false;
     };
-  }, [cliente.id]);
+  }, [pastaId]);
 
-  const imagens = arquivos.filter((f) => !ehVideo(f));
-  const videos = arquivos.filter(ehVideo);
-
-  const lista = arquivos
-    .filter((f) =>
-      filtro === "imagem" ? !ehVideo(f) : filtro === "video" ? ehVideo(f) : true
-    )
-    .filter((f) =>
-      busca ? f.name.toLowerCase().includes(busca.toLowerCase()) : true
-    );
-
-  async function copiar(f) {
+  const copiar = useCallback(async (f) => {
     if (!navigator.clipboard || typeof ClipboardItem === "undefined") {
-      alert("Este navegador não copia imagem para a área de transferência");
+      setErro("Este navegador não copia imagem para a área de transferência.");
       return;
     }
     try {
-      const blob = await baixarBlob(f);
-      const png = await rasterizarParaPng(blob);
+      const png = await rasterizarParaPng(await baixarBlob(f));
       await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
     } catch (e) {
-      alert("Não consegui copiar: " + (e.message || "erro"));
+      setErro("Não consegui copiar: " + (e.message || "erro"));
     }
-  }
+  }, []);
 
-  async function baixar(f) {
+  const baixar = useCallback(async (f) => {
     try {
-      const blob = await baixarBlob(f);
-      const url = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(await baixarBlob(f));
       const a = document.createElement("a");
       a.href = url;
       a.download = f.name;
@@ -145,210 +239,21 @@ function Galeria({ cliente, aoVoltar, busca }) {
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 30000);
     } catch (e) {
-      alert("Não consegui baixar: " + (e.message || "erro"));
+      setErro("Não consegui baixar: " + (e.message || "erro"));
     }
-  }
+  }, []);
 
-  return (
-    <>
-      <div className="card">
-        <div className="card-h">
-          <div className="t">{cliente.nome}</div>
-          <div className="a">
-            <button className="btn sm ghost" type="button" onClick={aoVoltar}>
-              ← Voltar
-            </button>
-          </div>
-        </div>
-        {cliente.caminho && <div className="sub">{cliente.caminho}</div>}
-      </div>
-
-      {erro && (
-        <div className="banner">
-          <b>Erro ao ler a pasta. </b>
-          {erro}
-        </div>
-      )}
-
-      {carregando ? (
-        <div className="empty">Lendo as pastas do cliente no Drive…</div>
-      ) : !arquivos.length ? (
-        <div className="empty">Nenhuma imagem ou vídeo nessa pasta.</div>
-      ) : (
-        <>
-          <div className="chips">
-            {[
-              ["tudo", `Tudo (${arquivos.length})`],
-              ["imagem", `Imagens (${imagens.length})`, imagens.length],
-              ["video", `Vídeos (${videos.length})`, videos.length],
-            ]
-              .filter((c) => c[2] === undefined || c[2] > 0)
-              .map(([k, rot]) => (
-                <button
-                  key={k}
-                  type="button"
-                  className={"chip" + (filtro === k ? " on" : "")}
-                  onClick={() => setFiltro(k)}
-                >
-                  {rot}
-                </button>
-              ))}
-          </div>
-
-          {truncado && (
-            <div className="banner">
-              <b>Mostrando os primeiros {arquivos.length} arquivos. </b>
-              A pasta é grande demais para varrer inteira de uma vez — abra uma
-              subpasta específica no Drive se faltar alguma coisa.
-            </div>
-          )}
-
-          {!lista.length ? (
-            <div className="empty">Nada com esse filtro.</div>
-          ) : (
-            <div className="grid g-assets">
-              {lista.map((f) => (
-                <div className="midia" key={f.id}>
-                  <button
-                    className="midia-img"
-                    type="button"
-                    onClick={() => setAberto(f)}
-                  >
-                    <img
-                      src={miniatura(f, 400)}
-                      alt={f.name}
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                      }}
-                    />
-                    {ehVideo(f) && <div className="midia-play">▶</div>}
-                  </button>
-                  <div className="midia-nome" title={f.name}>
-                    {f.name}
-                  </div>
-                  <div className="midia-acoes">
-                    {!ehVideo(f) && (
-                      <button
-                        className="btn sm"
-                        type="button"
-                        onClick={() => copiar(f)}
-                      >
-                        Copiar
-                      </button>
-                    )}
-                    <button
-                      className="btn sm ghost"
-                      type="button"
-                      onClick={() => baixar(f)}
-                    >
-                      Baixar
-                    </button>
-                    {f.webViewLink && (
-                      <a
-                        className="btn sm ghost"
-                        href={f.webViewLink}
-                        target="_blank"
-                        rel="noopener"
-                      >
-                        Drive
-                      </a>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      {aberto && (
-        <div className="overlay" onClick={() => setAberto(null)}>
-          <div className="modal wide" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-h">
-              <div className="t">{aberto.name}</div>
-              <button
-                className="btn sm ghost"
-                type="button"
-                onClick={() => setAberto(null)}
-              >
-                ✕
-              </button>
-            </div>
-            {ehVideo(aberto) ? (
-              /* Vídeo toca pelo player do próprio Drive: transcodificar ou
-                 servir o arquivo bruto seria baixar centenas de MB à toa. */
-              <iframe
-                src={urlPreview(aberto)}
-                title={aberto.name}
-                allow="autoplay"
-                style={{
-                  width: "100%",
-                  height: "60vh",
-                  border: 0,
-                  borderRadius: "var(--radius)",
-                  background: "#000",
-                }}
-              />
-            ) : (
-              <img
-                src={miniatura(aberto, 1600)}
-                alt={aberto.name}
-                referrerPolicy="no-referrer"
-                style={{
-                  maxWidth: "100%",
-                  maxHeight: "60vh",
-                  display: "block",
-                  margin: "0 auto",
-                  borderRadius: "var(--radius)",
-                }}
-              />
-            )}
-            <div className="sub" style={{ marginTop: 10 }}>
-              {aberto.mimeType}
-              {aberto.size ? " · " + fmtBytes(aberto.size) : ""}
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
-
-export default function Clientes({ busca }) {
-  const auth = useAuth();
-  const [termo, setTermo] = useState("");
-  const [buscando, setBuscando] = useState(false);
-  const [resultados, setResultados] = useState(null);
-  const [erro, setErro] = useState("");
-  const [cliente, setCliente] = useState(null);
-
-  if (cliente)
-    return (
-      <Galeria
-        cliente={cliente}
-        busca={busca}
-        aoVoltar={() => setCliente(null)}
-      />
-    );
-
-  const aviso = <AvisoDeAcesso />;
-  if (auth.expirou || auth.acessoDrive === false) return aviso;
-  if (auth.verificando)
-    return <div className="empty">Conferindo o seu acesso ao Drive…</div>;
-
-  async function buscar() {
+  async function procurar() {
     const t = termo.trim();
     if (!t) {
-      setResultados(null);
+      setAchados(null);
       return;
     }
     setBuscando(true);
     setErro("");
-    setResultados(null);
+    setAchados(null);
     try {
-      setResultados(await buscarClientes(t));
+      setAchados(await buscarNoAcervo(t));
     } catch (e) {
       setErro(e.message || "erro na busca");
     } finally {
@@ -356,80 +261,163 @@ export default function Clientes({ busca }) {
     }
   }
 
+  async function verTudo() {
+    setCarregando(true);
+    setErro("");
+    try {
+      setTudo(await listarMidias(pastaId));
+    } catch (e) {
+      setErro(e.message || "erro ao varrer a pasta");
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  const aviso = <AvisoDeAcesso />;
+  if (auth.expirou || auth.acessoDrive === false) return aviso;
+  if (auth.verificando) return <div className="empty">Conferindo o seu acesso ao Drive…</div>;
+
+  if (!raiz)
+    return (
+      <div className="banner">
+        <b>A pasta do acervo ainda não foi escolhida. </b>
+        Esta aba só lê o que estiver dentro de uma pasta definida em{" "}
+        <b>Configurações › Drive</b>. Enquanto não houver uma, não há onde
+        procurar — e procurar no Drive inteiro traria pasta que não é acervo.
+        Peça a um admin.
+      </div>
+    );
+
+  /* O campo de busca do topo filtra o que já está na tela; o campo daqui
+     vai ao Drive. São coisas diferentes e por isso convivem. */
+  const filtrar = (lista) =>
+    busca ? lista.filter((f) => f.name.toLowerCase().includes(busca.toLowerCase())) : lista;
+
+  const emBusca = achados !== null;
+  const arquivosNaTela = filtrar(
+    emBusca ? achados.arquivos : tudo ? tudo.arquivos : conteudo?.arquivos || []
+  );
+  const pastasNaTela = emBusca ? achados.pastas : conteudo?.pastas || [];
+
+  function irPara(id) {
+    setAchados(null);
+    setTermo("");
+    setPastaId(id);
+  }
+
   return (
     <>
       <div className="card">
-        <div className="card-h">
-          <div className="t">Buscar cliente</div>
-        </div>
         <div className="field">
-          <label>Cliente</label>
+          <label>Procurar no acervo</label>
           <input
             type="text"
             value={termo}
-            placeholder="Nome do cliente — ex: ifood"
+            placeholder="Nome do cliente ou do arquivo — ex: bridgestone, motoIfood"
             onChange={(e) => setTermo(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && buscar()}
+            onKeyDown={(e) => e.key === "Enter" && procurar()}
           />
         </div>
         <div className="chips">
-          <button
-            className="btn primary"
-            type="button"
-            onClick={buscar}
-            disabled={buscando}
-          >
-            {buscando ? "buscando…" : "Buscar"}
+          <button className="btn primary" type="button" onClick={procurar} disabled={buscando}>
+            {buscando ? "procurando…" : "Procurar"}
           </button>
-          {resultados && (
-            <button
-              className="btn ghost"
-              type="button"
-              onClick={() => {
-                setTermo("");
-                setResultados(null);
-              }}
-            >
-              Limpar
+          {emBusca && (
+            <button className="btn ghost" type="button" onClick={() => irPara(pastaId)}>
+              Voltar a navegar
             </button>
           )}
+        </div>
+        <div className="sub" style={{ marginTop: 10 }}>
+          Procura em qualquer profundidade, só dentro de <b>{nomeDaRaiz()}</b>.
         </div>
       </div>
 
       {erro && (
-        <div className="banner">
-          <b>O Drive recusou a busca. </b>
+        <div className="banner" style={{ borderColor: "var(--danger)" }}>
+          <b>Deu problema. </b>
           {erro}
         </div>
       )}
 
-      {buscando ? (
-        <div className="empty">Procurando no Drive…</div>
-      ) : !resultados ? (
-        <div className="empty">
-          Digite o nome do cliente e busque. Aparecem as pastas do Drive que
-          você tem acesso.
-        </div>
-      ) : !resultados.length ? (
-        <div className="empty">
-          Nenhuma pasta com esse nome. Confira a grafia — ou você pode não ter
-          acesso a ela no Drive.
-        </div>
-      ) : (
-        <div className="grid g-cards">
-          {resultados.map((r) => (
+      {!emBusca && trilha.length > 0 && (
+        <div className="chips" style={{ marginTop: 14 }}>
+          {trilha.map((p, i) => (
             <button
-              key={r.id}
+              key={p.id}
               type="button"
-              className="card cliente-card"
-              onClick={() => setCliente(r)}
+              className={"chip" + (i === trilha.length - 1 ? " on" : "")}
+              onClick={() => irPara(p.id)}
             >
-              <div className="cliente-nome">{r.nome}</div>
-              {r.caminho && <div className="cliente-caminho">{r.caminho}</div>}
+              {p.nome}
             </button>
           ))}
         </div>
       )}
+
+      {carregando ? (
+        <div className="empty">Lendo o Drive…</div>
+      ) : (
+        <>
+          {emBusca && !achados.arquivos.length && !achados.pastas.length && (
+            <div className="empty">
+              Nada com esse nome dentro de {nomeDaRaiz()}. Pode estar escrito
+              diferente, ou em outra pasta do Drive que não é acervo.
+            </div>
+          )}
+
+          {pastasNaTela.length > 0 && (
+            <>
+              <div className="sub" style={{ margin: "18px 0 8px" }}>
+                {emBusca ? "Pastas com esse nome" : "Pastas"} ({pastasNaTela.length})
+              </div>
+              <div className="grid g-cards">
+                {pastasNaTela.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className="card cliente-card"
+                    onClick={() => irPara(p.id)}
+                  >
+                    <div className="cliente-nome">📁 {p.nome}</div>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {arquivosNaTela.length > 0 && (
+            <>
+              <div className="sub" style={{ margin: "18px 0 8px" }}>
+                {emBusca ? "Arquivos encontrados" : tudo ? "Tudo desta pasta e das de dentro" : "Arquivos aqui"}{" "}
+                ({arquivosNaTela.length})
+                {tudo?.truncado && " — parei no teto, a pasta é grande"}
+              </div>
+              <div className="grid g-assets">
+                {arquivosNaTela.map((f) => (
+                  <Midia key={f.id} f={f} aoAbrir={setAberto} aoCopiar={copiar} aoBaixar={baixar} />
+                ))}
+              </div>
+            </>
+          )}
+
+          {!emBusca && !tudo && conteudo && (
+            <div className="chips" style={{ marginTop: 18 }}>
+              <button className="btn" type="button" onClick={verTudo}>
+                Ver todas as imagens desta pasta e das de dentro
+              </button>
+            </div>
+          )}
+
+          {!emBusca &&
+            conteudo &&
+            !conteudo.pastas.length &&
+            !conteudo.arquivos.length &&
+            !tudo && <div className="empty">Esta pasta está vazia.</div>}
+        </>
+      )}
+
+      <Visor f={aberto} aoFechar={() => setAberto(null)} />
     </>
   );
 }

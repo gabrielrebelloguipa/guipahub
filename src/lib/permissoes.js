@@ -32,7 +32,7 @@ const vazio = () => ({
   perfis: [],
   eu: null,
   abasPadrao: TODAS_AS_CHAVES,
-  drive: { raizId: "", raizNome: "", somenteRaiz: false },
+  drive: { raizId: "", raizNome: "" },
   carregando: temSupabase(),
   erro: "",
 });
