@@ -19,7 +19,7 @@ import {
   usePermissoes,
   abasDe,
 } from "./lib/permissoes.js";
-import { definirRaiz, aquecerArvore } from "./lib/drive.js";
+import { definirRaiz } from "./lib/drive.js";
 import { DIAS, MESES } from "./lib/constantes.js";
 
 const TITULOS = {
@@ -69,11 +69,9 @@ export default function App() {
   const { drive: confDrive } = usePermissoes();
   useEffect(() => {
     definirRaiz(confDrive);
-    /* Indexa a arvore do acervo em segundo plano, sem travar a tela. A
-       primeira busca por palavra precisa dela, e montar leva alguns
-       segundos: comecar agora e nao quando a pessoa digitar e a
-       diferenca entre uma busca instantanea e uma de espera. */
-    aquecerArvore();
+    /* Quem dispara a indexacao e a aba Imagens, e so depois de ja ter
+       desenhado as pastas. Fazer isso aqui, no login, punia quem nem ia
+       usar a aba: 30 chamadas competindo com o carregamento da tela. */
   }, [confDrive.raizId, confDrive.raizNome]);
 
   if (!auth.perfil) return <Login />;

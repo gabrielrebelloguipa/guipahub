@@ -63,6 +63,12 @@
 
   * { box-sizing: border-box; }
   html, body { height: 100%; }
+  /* O React monta aqui dentro. Sem altura, o #root fica com altura
+     automatica, o .shell com height:100% colapsa junto, e o body
+     (overflow:hidden) corta o que passa da tela -- a rolagem interna da
+     .view nunca chega a existir. So apareceu quando uma aba ficou longa
+     o bastante para passar da altura da janela. */
+  #root { height: 100%; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
     /* SF Pro é a tipografia oficial do brandbook — só existe em Mac/iOS.
@@ -207,6 +213,7 @@
 
   /* ---- chips ---- */
   .chips { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 14px; }
+  .chips.filtros { margin-top: 16px; }
   .chip {
     border: 1px solid var(--border); background: var(--surface); color: var(--text-dim);
     border-radius: 999px; padding: 4px 11px; font-size: 0.76rem; cursor: pointer;

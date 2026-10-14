@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../lib/useAuth.js";
 import { pedirToken } from "../lib/auth.js";
 import {
+  aquecerArvore,
   raizConfigurada,
   nomeDaRaiz,
   listarFilhos,
@@ -295,8 +296,16 @@ export default function Imagens({ busca }) {
       .then((c) => vivo && setTopo(c))
       .catch((e) => vivo && setErro(e.message || "erro ao ler a pasta raiz"))
       .finally(() => vivo && setCarregando(false));
+
+    /* O indice da arvore (umas 30 chamadas) so serve para a BUSCA, nunca
+       para navegar. Disparado junto com a abertura da aba, ele disputava
+       as 6 conexoes que o navegador abre por servidor e deixava cada
+       clique em pasta esperando atras dele. Depois de um respiro, a
+       navegacao ja pegou o que precisava e a indexacao usa a sobra. */
+    const atraso = setTimeout(() => aquecerArvore(), 3000);
     return () => {
       vivo = false;
+      clearTimeout(atraso);
     };
   }, [raiz]);
 
@@ -401,7 +410,7 @@ export default function Imagens({ busca }) {
         </div>
       </div>
 
-      <div className="chips">
+      <div className="chips filtros">
         {FILTROS.map(([k, rot]) => (
           <button
             key={k}
