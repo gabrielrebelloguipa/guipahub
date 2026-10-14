@@ -119,6 +119,30 @@ function perfilDaSessao(sessao) {
 
 /* ---------- entrar e sair ---------- */
 
+/* O projeto Supabase do plano gratuito hiberna depois de semanas parado,
+   e volta devolvendo 503 por alguns minutos enquanto sobe. Nesse estado
+   o cliente não devolve erro: ele fica tentando renovar a sessão e a
+   promessa nunca resolve. Sem prazo, o botão de entrar simplesmente não
+   reage — nada acontece, nada é dito, e quem está na frente da tela
+   conclui que o site quebrou.
+
+   Daí este prazo. Ele não conserta o servidor; conserta o silêncio. */
+const PRAZO_MS = 12000;
+
+function comPrazo(promessa) {
+  return Promise.race([
+    promessa,
+    new Promise((_, falha) =>
+      setTimeout(() => falha(new Error("sem resposta")), PRAZO_MS)
+    ),
+  ]);
+}
+
+const FORA_DO_AR =
+  "O servidor não respondeu. Isso costuma ser o banco de dados saindo de " +
+  "hibernação, o que leva alguns minutos. Tente de novo daqui a pouco — se " +
+  "insistir, avise quem administra o GuipaHub.";
+
 export async function pedirToken(silencioso, depois) {
   if (!temSupabase()) {
     mudar({ erro: "Supabase não configurado. Preencha src/config.js." });
@@ -128,12 +152,19 @@ export async function pedirToken(silencioso, depois) {
   /* No silencioso não se abre janela nenhuma: só se olha se já existe
      sessão. É o caminho de quem reabre o site já logado. */
   if (silencioso) {
-    const { data } = await supabase.auth.getSession();
-    if (data?.session) {
-      aplicarSessao(data.session);
-      if (depois) depois();
-    } else if (estado.perfil) {
-      mudar({ expirou: true });
+    try {
+      const { data } = await comPrazo(supabase.auth.getSession());
+      if (data?.session) {
+        aplicarSessao(data.session);
+        if (depois) depois();
+      } else if (estado.perfil) {
+        mudar({ expirou: true });
+      }
+    } catch {
+      /* Silencioso que falha não vira alarme: a pessoa ainda nem pediu
+         para entrar. Mas a tela de login passa a ter o que dizer caso
+         ela tente. */
+      mudar({ erro: FORA_DO_AR });
     }
     return;
   }
@@ -143,20 +174,25 @@ export async function pedirToken(silencioso, depois) {
   /* `hd` restringe o seletor de contas ao domínio, e `prompt: consent`
      garante que a autorização do Drive seja pedida de novo quando o
      provider_token tiver vencido. */
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
-    options: {
-      scopes: ESCOPOS_DRIVE,
-      queryParams: { hd: DOMINIO_OK, prompt: "consent", access_type: "offline" },
-      redirectTo: window.location.origin,
-    },
-  });
-
-  if (error) {
-    mudar({ entrando: false, erro: "Não consegui abrir o login: " + error.message });
+  try {
+    const { error } = await comPrazo(
+      supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          scopes: ESCOPOS_DRIVE,
+          queryParams: { hd: DOMINIO_OK, prompt: "consent", access_type: "offline" },
+          redirectTo: window.location.origin,
+        },
+      })
+    );
+    if (error) {
+      mudar({ entrando: false, erro: "Não consegui abrir o login: " + error.message });
+    }
+    /* Sem erro, o navegador sai da página para o Google e volta depois —
+       quem trata a volta é o onAuthStateChange lá embaixo. */
+  } catch {
+    mudar({ entrando: false, erro: FORA_DO_AR });
   }
-  /* Sem erro, o navegador sai da página para o Google e volta depois —
-     quem trata a volta é o onAuthStateChange lá embaixo. */
 }
 
 export function comToken(fn) {
