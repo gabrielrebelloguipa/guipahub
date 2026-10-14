@@ -49,7 +49,11 @@ const TETO_SUBIDA = 20;
 let raizDoBanco = { raizId: "", raizNome: "" };
 
 export function definirRaiz(d) {
-  raizDoBanco = { raizId: d?.raizId || "", raizNome: d?.raizNome || "" };
+  const novo = { raizId: d?.raizId || "", raizNome: d?.raizNome || "" };
+  /* Raiz nova invalida o índice inteiro: ele é um mapa de dentro da raiz
+     antiga, e aproveitá-lo deixaria passar pasta que não é mais acervo. */
+  if (novo.raizId !== raizDoBanco.raizId) esquecerArvore();
+  raizDoBanco = novo;
 }
 
 export function raizConfigurada() {
@@ -137,6 +141,98 @@ async function pastaPorId(id) {
   }
 }
 
+/* ---------- índice da árvore ---------- */
+
+/* O Drive não sabe responder "é descendente de X?" — só "é filho direto
+   de X?". Sem um índice, conferir 200 resultados de busca viraria uma
+   escada de perguntas por resultado: lento de doer na primeira busca e
+   perto do limite de chamadas do Google.
+
+   Então o mapa pasta → pai é montado UMA vez, em segundo plano, logo que
+   a raiz é conhecida. Depois disso "está dentro do acervo?" é uma
+   consulta na memória, instantânea.
+
+   Montar é barato porque o Drive aceita vários pais na mesma pergunta:
+   em vez de 1265 chamadas, são lotes de 50 pais por vez — cerca de 30
+   chamadas para a árvore inteira. */
+const LOTE_PAIS = 50;
+const TETO_ARVORE = 5000;
+const PROFUNDIDADE_MAX = 15;
+
+const arvore = new Map(); // id da pasta -> id do pai
+let arvoreCompleta = false;
+let arvorePromessa = null;
+
+function fatiar(lista, n) {
+  const fatias = [];
+  for (let i = 0; i < lista.length; i += n) fatias.push(lista.slice(i, i + n));
+  return fatias;
+}
+
+async function montarArvore(raiz) {
+  arvore.clear();
+  arvore.set(raiz, null);
+  let nivel = [raiz];
+  let total = 0;
+  let estourou = false;
+
+  for (let p = 0; p < PROFUNDIDADE_MAX && nivel.length && !estourou; p++) {
+    const proximo = [];
+    for (const lote of fatiar(nivel, LOTE_PAIS)) {
+      const q = lote.map((id) => `'${escapaQ(id)}' in parents`).join(" or ");
+      let pageToken;
+      do {
+        const r = await pedir("files", {
+          q: `(${q}) and mimeType='${PASTA}' and trashed=false`,
+          fields: "nextPageToken,files(id,name,parents)",
+          pageSize: 1000,
+          pageToken,
+        });
+        for (const f of r.files || []) {
+          if (arvore.has(f.id)) continue;
+          arvore.set(f.id, f.parents?.[0] || null);
+          cachePasta.set(f.id, f);
+          proximo.push(f.id);
+          total++;
+        }
+        if (total >= TETO_ARVORE) estourou = true;
+        pageToken = estourou ? null : r.nextPageToken;
+      } while (pageToken);
+      if (estourou) break;
+    }
+    nivel = proximo;
+  }
+
+  /* Só vale afirmar "está fora da raiz" quando a árvore foi varrida
+     inteira. Truncada, um id ausente pode ser pasta que ficou de fora,
+     e aí a conferência volta a subir pela API. */
+  arvoreCompleta = !estourou;
+  return arvoreCompleta;
+}
+
+/* Dispara a indexação sem bloquear ninguém. O App chama isto assim que a
+   raiz é conhecida, para que a primeira busca já encontre tudo pronto. */
+export function aquecerArvore() {
+  const raiz = raizConfigurada();
+  if (!raiz) return Promise.resolve(false);
+  if (!arvorePromessa) {
+    arvorePromessa = comTokenAsync(() => montarArvore(raiz)).catch(() => false);
+  }
+  return arvorePromessa;
+}
+
+/* Trocar a raiz invalida o índice inteiro. */
+export function esquecerArvore() {
+  arvore.clear();
+  arvoreCompleta = false;
+  arvorePromessa = null;
+  cachePasta.clear();
+}
+
+export function tamanhoDoIndice() {
+  return arvore.size;
+}
+
 /* ---------- navegar ---------- */
 
 /* Um nível só: o que tem dentro desta pasta. É assim que a tela navega —
@@ -189,17 +285,24 @@ export function trilhaAteRaiz(pastaId) {
 
 /* ---------- buscar ---------- */
 
-/* O Drive não sabe perguntar "descendente de X" — só sabe "filho direto
-   de X". Então a busca por nome roda no que a pessoa enxerga e cada
-   resultado é conferido subindo até a raiz.
+/* "Este arquivo está dentro do acervo?" — com o índice pronto é uma
+   caminhada na memória, sem rede. Sem índice (ou com ele truncado), cai
+   para perguntar ao Drive de pai em pai.
 
    Subir sem limite fixo é o ponto: a estrutura tem 12 níveis, e qualquer
    número redondo escolhido a dedo descartaria arquivo legítimo do fundo
-   sem dizer por quê. O cache segura o custo — os ancestrais se repetem. */
+   sem dizer por quê. TETO_SUBIDA só existe contra ciclo de pastas. */
 async function dentroDaRaiz(f, raiz) {
   let id = f.parents?.[0];
   for (let i = 0; i < TETO_SUBIDA && id; i++) {
     if (id === raiz) return true;
+    if (arvore.has(id)) {
+      id = arvore.get(id);
+      continue;
+    }
+    /* Índice inteiro na mão e o id não está nele: está fora da raiz,
+       ponto. Só dá para afirmar isso quando a varredura terminou. */
+    if (arvoreCompleta) return false;
     const p = await pastaPorId(id);
     if (!p) return false;
     id = p.parents?.[0];
@@ -214,6 +317,11 @@ export function buscarNoAcervo(termo) {
   return comTokenAsync(async () => {
     const raiz = raizConfigurada();
     if (!raiz) return { arquivos: [], pastas: [], semRaiz: true };
+
+    /* Espera o índice antes de peneirar. Se ele ainda estiver sendo
+       montado, esperar é mais rápido que conferir resultado por resultado
+       pela rede — e evita descartar arquivo por timeout. */
+    await aquecerArvore();
 
     const t = escapaQ(termo);
     const [rArq, rPas] = await Promise.all([
