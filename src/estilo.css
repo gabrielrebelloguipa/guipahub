@@ -625,3 +625,38 @@
     font-size: 0.82rem; font-weight: 600; font-family: inherit;
   }
   .seg button.on { background: var(--accent); color: var(--accent-ink); }
+
+  /* ---------- árvore de pastas do acervo ---------- */
+
+  /* Lista que abre no lugar, em vez de trocar de tela: quem procura uma
+     imagem quer comparar o que tem em duas pastas sem perder de vista
+     onde estava. */
+  .arvore { display: flex; flex-direction: column; gap: 2px; }
+  .arv-item { display: flex; flex-direction: column; }
+  .arv-linha {
+    display: flex; align-items: center; gap: 8px;
+    width: 100%; text-align: left;
+    font: inherit; font-size: 0.9rem; color: var(--text);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 9px 12px; cursor: pointer;
+  }
+  .arv-linha:hover { border-color: var(--accent); }
+  .arv-linha.on { background: var(--surface-2); border-color: var(--accent); }
+  .arv-seta { color: var(--muted); font-size: 0.7rem; width: 10px; flex: none; }
+  .arv-nome { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .arv-conta { color: var(--muted); font-size: 0.74rem; flex: none; }
+  .arv-dentro {
+    display: flex; flex-direction: column; gap: 2px;
+    margin: 4px 0 8px; padding-top: 2px;
+    border-left: 1px solid var(--border);
+  }
+  .arv-dentro .empty { padding: 10px; font-size: 0.82rem; }
+
+  /* Arquivo sem miniatura (PSD, AI, prproj): a extensão no lugar da
+     imagem diz mais que um ícone genérico. */
+  .midia-sem {
+    display: flex; align-items: center; justify-content: center;
+    width: 100%; height: 100%;
+    font-size: 0.78rem; font-weight: 700; letter-spacing: .06em;
+    color: var(--muted); background: var(--surface-2);
+  }

@@ -1,19 +1,29 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../lib/useAuth.js";
 import { pedirToken } from "../lib/auth.js";
 import {
   raizConfigurada,
   nomeDaRaiz,
   listarFilhos,
-  trilhaAteRaiz,
   buscarNoAcervo,
-  listarMidias,
   baixarBlob,
   ehVideo,
+  ehImagem,
+  tipoDe,
+  extensaoDe,
   miniatura,
   urlPreview,
   fmtBytes,
 } from "../lib/drive.js";
+
+/* Quantos itens aparecem de uma vez. Uma pasta de cliente pode ter
+   centenas de arquivos, e montar tudo de uma vez trava a rolagem no
+   celular — some o conteúdo por trás de um segundo de tela branca. */
+const PAGINA = 60;
+
+/* Tempo de silêncio antes de ir ao Drive. Buscar a cada tecla seria uma
+   chamada por letra: lento para quem digita e desperdício de cota. */
+const ESPERA_MS = 400;
 
 /* Rasteriza qualquer imagem para PNG antes de copiar. Converter sempre,
    em vez de tentar o mime original, evita depender do que cada navegador
@@ -40,8 +50,6 @@ function rasterizarParaPng(blob) {
   });
 }
 
-/* Avisos que não são sobre a busca, e sim sobre o acesso. Devolve null
-   quando não há nada a dizer. */
 function AvisoDeAcesso() {
   const auth = useAuth();
 
@@ -77,28 +85,35 @@ function AvisoDeAcesso() {
   return null;
 }
 
-/* ---------- peças de mídia ---------- */
+/* ---------- um arquivo ---------- */
 
-function Midia({ f, aoAbrir, aoCopiar, aoBaixar }) {
+function Cartao({ f, aoAbrir, aoCopiar, aoBaixar }) {
+  const tem = ehImagem(f) || ehVideo(f);
   return (
     <div className="midia">
-      <button className="midia-img" type="button" onClick={() => aoAbrir(f)}>
-        <img
-          src={miniatura(f, 400)}
-          alt={f.name}
-          loading="lazy"
-          referrerPolicy="no-referrer"
-          onError={(e) => {
-            e.currentTarget.style.display = "none";
-          }}
-        />
+      <button className="midia-img" type="button" onClick={() => tem && aoAbrir(f)}>
+        {tem ? (
+          <img
+            src={miniatura(f, 400)}
+            alt={f.name}
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+            }}
+          />
+        ) : (
+          /* PSD, AI, prproj não têm miniatura no Drive. A extensão diz
+             mais do que um ícone genérico de arquivo. */
+          <div className="midia-sem">{extensaoDe(f)}</div>
+        )}
         {ehVideo(f) && <div className="midia-play">▶</div>}
       </button>
       <div className="midia-nome" title={f.name}>
         {f.name}
       </div>
       <div className="midia-acoes">
-        {!ehVideo(f) && (
+        {ehImagem(f) && (
           <button className="btn sm" type="button" onClick={() => aoCopiar(f)}>
             Copiar
           </button>
@@ -134,26 +149,14 @@ function Visor({ f, aoFechar }) {
             src={urlPreview(f)}
             title={f.name}
             allow="autoplay"
-            style={{
-              width: "100%",
-              height: "60vh",
-              border: 0,
-              borderRadius: "var(--radius)",
-              background: "#000",
-            }}
+            style={{ width: "100%", height: "60vh", border: 0, borderRadius: "var(--radius)", background: "#000" }}
           />
         ) : (
           <img
             src={miniatura(f, 1600)}
             alt={f.name}
             referrerPolicy="no-referrer"
-            style={{
-              maxWidth: "100%",
-              maxHeight: "60vh",
-              display: "block",
-              margin: "0 auto",
-              borderRadius: "var(--radius)",
-            }}
+            style={{ maxWidth: "100%", maxHeight: "60vh", display: "block", margin: "0 auto", borderRadius: "var(--radius)" }}
           />
         )}
         <div className="sub" style={{ marginTop: 10 }}>
@@ -165,16 +168,114 @@ function Visor({ f, aoFechar }) {
   );
 }
 
+/* ---------- grade com paginação ---------- */
+
+function Grade({ arquivos, acoes }) {
+  const [mostrando, setMostrando] = useState(PAGINA);
+
+  /* Trocar de pasta ou de filtro recomeça a contagem — senão a pessoa
+     abriria uma pasta pequena já "expandida" de uma anterior. */
+  useEffect(() => setMostrando(PAGINA), [arquivos]);
+
+  if (!arquivos.length) return null;
+  const faltam = arquivos.length - mostrando;
+
+  return (
+    <>
+      <div className="grid g-assets">
+        {arquivos.slice(0, mostrando).map((f) => (
+          <Cartao key={f.id} f={f} {...acoes} />
+        ))}
+      </div>
+      {faltam > 0 && (
+        <div className="chips" style={{ marginTop: 12 }}>
+          <button className="btn sm" type="button" onClick={() => setMostrando((m) => m + PAGINA)}>
+            Mostrar mais {Math.min(faltam, PAGINA)} de {faltam}
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+
+/* ---------- a lista de pastas, que abre no lugar ---------- */
+
+/* Cada linha carrega o próprio conteúdo na primeira vez que é aberta, e
+   guarda depois disso. Abrir e fechar de novo não repete a chamada. */
+function LinhaPasta({ pasta, nivel, filtro, acoes }) {
+  const [aberta, setAberta] = useState(false);
+  const [dentro, setDentro] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  async function alternar() {
+    const vai = !aberta;
+    setAberta(vai);
+    if (!vai || dentro || carregando) return;
+    setCarregando(true);
+    setErro("");
+    try {
+      setDentro(await listarFilhos(pasta.id));
+    } catch (e) {
+      setErro(e.message || "não consegui abrir");
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  const arquivos = dentro ? dentro.arquivos.filter((f) => !filtro || tipoDe(f) === filtro) : [];
+  const vazia = dentro && !dentro.pastas.length && !dentro.arquivos.length;
+
+  return (
+    <div className="arv-item">
+      <button
+        className={"arv-linha" + (aberta ? " on" : "")}
+        type="button"
+        onClick={alternar}
+        style={{ paddingLeft: 10 + nivel * 18 }}
+      >
+        <span className="arv-seta">{aberta ? "▾" : "▸"}</span>
+        <span className="arv-nome">{pasta.nome}</span>
+        {dentro && (
+          <span className="arv-conta">
+            {dentro.pastas.length ? `${dentro.pastas.length} pastas` : ""}
+            {dentro.pastas.length && dentro.arquivos.length ? " · " : ""}
+            {dentro.arquivos.length ? `${dentro.arquivos.length} arquivos` : ""}
+          </span>
+        )}
+      </button>
+
+      {aberta && (
+        <div className="arv-dentro" style={{ paddingLeft: 10 + nivel * 18 }}>
+          {carregando && <div className="empty">Lendo…</div>}
+          {erro && <div className="banner">{erro}</div>}
+          {vazia && <div className="empty">Pasta vazia.</div>}
+          {dentro?.pastas.map((p) => (
+            <LinhaPasta key={p.id} pasta={p} nivel={nivel + 1} filtro={filtro} acoes={acoes} />
+          ))}
+          {dentro && !!dentro.arquivos.length && !arquivos.length && (
+            <div className="empty">Nada deste tipo nesta pasta.</div>
+          )}
+          <Grade arquivos={arquivos} acoes={acoes} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ---------- a aba ---------- */
 
-export default function Clientes({ busca }) {
+const FILTROS = [
+  ["imagem", "Imagens"],
+  ["video", "Vídeos"],
+  ["outro", "Outros arquivos"],
+];
+
+export default function Imagens({ busca }) {
   const auth = useAuth();
   const raiz = raizConfigurada();
 
-  /* Onde estamos agora. null = ainda não abriu nada, então vale a raiz. */
-  const [pastaId, setPastaId] = useState(raiz);
-  const [trilha, setTrilha] = useState([]);
-  const [conteudo, setConteudo] = useState(null);
+  const [topo, setTopo] = useState(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -182,38 +283,50 @@ export default function Clientes({ busca }) {
   const [buscando, setBuscando] = useState(false);
   const [achados, setAchados] = useState(null);
 
-  const [tudo, setTudo] = useState(null);
+  const [filtro, setFiltro] = useState("");
   const [aberto, setAberto] = useState(null);
 
-  /* Trocar a raiz em Configurações tem que devolver a navegação ao topo:
-     continuar numa pasta do acervo antigo mostraria o que não é mais
-     acervo. */
   useEffect(() => {
-    setPastaId(raiz);
-    setAchados(null);
-    setTudo(null);
-  }, [raiz]);
-
-  useEffect(() => {
-    if (!pastaId) return;
+    if (!raiz) return;
     let vivo = true;
     setCarregando(true);
     setErro("");
-    setTudo(null);
-    Promise.all([listarFilhos(pastaId), trilhaAteRaiz(pastaId)])
-      .then(([c, t]) => {
-        if (!vivo) return;
-        setConteudo(c);
-        setTrilha(t);
-      })
-      .catch((e) => vivo && setErro(e.message || "erro ao ler a pasta"))
+    listarFilhos(raiz)
+      .then((c) => vivo && setTopo(c))
+      .catch((e) => vivo && setErro(e.message || "erro ao ler a pasta raiz"))
       .finally(() => vivo && setCarregando(false));
-    /* `vivo` evita gravar o conteúdo de uma pasta que já foi trocada — sem
-       isso, clicar rápido em duas pastas misturaria os resultados. */
     return () => {
       vivo = false;
     };
-  }, [pastaId]);
+  }, [raiz]);
+
+  /* Busca enquanto digita: espera o dedo parar, e cancela o resultado de
+     uma digitação já abandonada. Sem o `vivo`, uma busca lenta de três
+     letras atrás chegaria depois e sobrescreveria a atual. */
+  const pedido = useRef(0);
+  useEffect(() => {
+    const t = termo.trim();
+    if (t.length < 2) {
+      setAchados(null);
+      setBuscando(false);
+      return;
+    }
+    const meu = ++pedido.current;
+    setBuscando(true);
+    const id = setTimeout(() => {
+      buscarNoAcervo(t)
+        .then((r) => {
+          if (meu === pedido.current) setAchados(r);
+        })
+        .catch((e) => {
+          if (meu === pedido.current) setErro(e.message || "erro na busca");
+        })
+        .finally(() => {
+          if (meu === pedido.current) setBuscando(false);
+        });
+    }, ESPERA_MS);
+    return () => clearTimeout(id);
+  }, [termo]);
 
   const copiar = useCallback(async (f) => {
     if (!navigator.clipboard || typeof ClipboardItem === "undefined") {
@@ -243,38 +356,9 @@ export default function Clientes({ busca }) {
     }
   }, []);
 
-  async function procurar() {
-    const t = termo.trim();
-    if (!t) {
-      setAchados(null);
-      return;
-    }
-    setBuscando(true);
-    setErro("");
-    setAchados(null);
-    try {
-      setAchados(await buscarNoAcervo(t));
-    } catch (e) {
-      setErro(e.message || "erro na busca");
-    } finally {
-      setBuscando(false);
-    }
-  }
+  const acoes = { aoAbrir: setAberto, aoCopiar: copiar, aoBaixar: baixar };
 
-  async function verTudo() {
-    setCarregando(true);
-    setErro("");
-    try {
-      setTudo(await listarMidias(pastaId));
-    } catch (e) {
-      setErro(e.message || "erro ao varrer a pasta");
-    } finally {
-      setCarregando(false);
-    }
-  }
-
-  const aviso = <AvisoDeAcesso />;
-  if (auth.expirou || auth.acessoDrive === false) return aviso;
+  if (auth.expirou || auth.acessoDrive === false) return <AvisoDeAcesso />;
   if (auth.verificando) return <div className="empty">Conferindo o seu acesso ao Drive…</div>;
 
   if (!raiz)
@@ -283,137 +367,107 @@ export default function Clientes({ busca }) {
         <b>A pasta do acervo ainda não foi escolhida. </b>
         Esta aba só lê o que estiver dentro de uma pasta definida em{" "}
         <b>Configurações › Drive</b>. Enquanto não houver uma, não há onde
-        procurar — e procurar no Drive inteiro traria pasta que não é acervo.
-        Peça a um admin.
+        procurar. Peça a um admin.
       </div>
     );
 
-  /* O campo de busca do topo filtra o que já está na tela; o campo daqui
-     vai ao Drive. São coisas diferentes e por isso convivem. */
-  const filtrar = (lista) =>
-    busca ? lista.filter((f) => f.name.toLowerCase().includes(busca.toLowerCase())) : lista;
+  /* O campo do topo filtra o que já está na tela; o daqui vai ao Drive. */
+  const peneirar = (lista) => {
+    let l = filtro ? lista.filter((f) => tipoDe(f) === filtro) : lista;
+    if (busca) l = l.filter((f) => f.name.toLowerCase().includes(busca.toLowerCase()));
+    return l;
+  };
 
   const emBusca = achados !== null;
-  const arquivosNaTela = filtrar(
-    emBusca ? achados.arquivos : tudo ? tudo.arquivos : conteudo?.arquivos || []
-  );
-  const pastasNaTela = emBusca ? achados.pastas : conteudo?.pastas || [];
-
-  function irPara(id) {
-    setAchados(null);
-    setTermo("");
-    setPastaId(id);
-  }
 
   return (
     <>
       <div className="card">
         <div className="field">
-          <label>Procurar no acervo</label>
+          <label>Procurar em {nomeDaRaiz()}</label>
           <input
             type="text"
             value={termo}
-            placeholder="Nome do cliente ou do arquivo — ex: bridgestone, motoIfood"
+            placeholder="Digite o nome do cliente ou do arquivo"
             onChange={(e) => setTermo(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && procurar()}
           />
         </div>
-        <div className="chips">
-          <button className="btn primary" type="button" onClick={procurar} disabled={buscando}>
-            {buscando ? "procurando…" : "Procurar"}
+        <div className="sub">
+          {buscando
+            ? "procurando…"
+            : emBusca
+            ? `${achados.pastas.length} pastas e ${achados.arquivos.length} arquivos`
+            : "A busca começa a partir de duas letras, em qualquer profundidade."}
+        </div>
+      </div>
+
+      <div className="chips">
+        {FILTROS.map(([k, rot]) => (
+          <button
+            key={k}
+            type="button"
+            className={"chip" + (filtro === k ? " on" : "")}
+            onClick={() => setFiltro(filtro === k ? "" : k)}
+          >
+            {rot}
           </button>
-          {emBusca && (
-            <button className="btn ghost" type="button" onClick={() => irPara(pastaId)}>
-              Voltar a navegar
-            </button>
-          )}
-        </div>
-        <div className="sub" style={{ marginTop: 10 }}>
-          Procura em qualquer profundidade, só dentro de <b>{nomeDaRaiz()}</b>.
-        </div>
+        ))}
+        {filtro && (
+          <button className="chip" type="button" onClick={() => setFiltro("")}>
+            limpar filtro
+          </button>
+        )}
       </div>
 
       {erro && (
         <div className="banner" style={{ borderColor: "var(--danger)" }}>
           <b>Deu problema. </b>
           {erro}
+          <button className="btn sm ghost" type="button" style={{ marginLeft: 8 }} onClick={() => setErro("")}>
+            ok
+          </button>
         </div>
       )}
 
-      {!emBusca && trilha.length > 0 && (
-        <div className="chips" style={{ marginTop: 14 }}>
-          {trilha.map((p, i) => (
-            <button
-              key={p.id}
-              type="button"
-              className={"chip" + (i === trilha.length - 1 ? " on" : "")}
-              onClick={() => irPara(p.id)}
-            >
-              {p.nome}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {carregando ? (
-        <div className="empty">Lendo o Drive…</div>
+      {emBusca ? (
+        <>
+          {!!achados.pastas.length && (
+            <>
+              <div className="sub" style={{ margin: "16px 0 8px" }}>Pastas</div>
+              <div className="arvore">
+                {achados.pastas.map((p) => (
+                  <LinhaPasta key={p.id} pasta={p} nivel={0} filtro={filtro} acoes={acoes} />
+                ))}
+              </div>
+            </>
+          )}
+          {(() => {
+            const l = peneirar(achados.arquivos);
+            if (!l.length)
+              return !achados.pastas.length ? (
+                <div className="empty">Nada com esse nome em {nomeDaRaiz()}.</div>
+              ) : null;
+            return (
+              <>
+                <div className="sub" style={{ margin: "16px 0 8px" }}>Arquivos ({l.length})</div>
+                <Grade arquivos={l} acoes={acoes} />
+              </>
+            );
+          })()}
+        </>
+      ) : carregando ? (
+        <div className="empty">Lendo o acervo…</div>
       ) : (
         <>
-          {emBusca && !achados.arquivos.length && !achados.pastas.length && (
-            <div className="empty">
-              Nada com esse nome dentro de {nomeDaRaiz()}. Pode estar escrito
-              diferente, ou em outra pasta do Drive que não é acervo.
-            </div>
+          <div className="arvore">
+            {topo?.pastas.map((p) => (
+              <LinhaPasta key={p.id} pasta={p} nivel={0} filtro={filtro} acoes={acoes} />
+            ))}
+          </div>
+          <Grade arquivos={peneirar(topo?.arquivos || [])} acoes={acoes} />
+          {topo && !topo.pastas.length && !topo.arquivos.length && (
+            <div className="empty">A pasta raiz está vazia.</div>
           )}
-
-          {pastasNaTela.length > 0 && (
-            <>
-              <div className="sub" style={{ margin: "18px 0 8px" }}>
-                {emBusca ? "Pastas com esse nome" : "Pastas"} ({pastasNaTela.length})
-              </div>
-              <div className="grid g-cards">
-                {pastasNaTela.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    className="card cliente-card"
-                    onClick={() => irPara(p.id)}
-                  >
-                    <div className="cliente-nome">📁 {p.nome}</div>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-
-          {arquivosNaTela.length > 0 && (
-            <>
-              <div className="sub" style={{ margin: "18px 0 8px" }}>
-                {emBusca ? "Arquivos encontrados" : tudo ? "Tudo desta pasta e das de dentro" : "Arquivos aqui"}{" "}
-                ({arquivosNaTela.length})
-                {tudo?.truncado && " — parei no teto, a pasta é grande"}
-              </div>
-              <div className="grid g-assets">
-                {arquivosNaTela.map((f) => (
-                  <Midia key={f.id} f={f} aoAbrir={setAberto} aoCopiar={copiar} aoBaixar={baixar} />
-                ))}
-              </div>
-            </>
-          )}
-
-          {!emBusca && !tudo && conteudo && (
-            <div className="chips" style={{ marginTop: 18 }}>
-              <button className="btn" type="button" onClick={verTudo}>
-                Ver todas as imagens desta pasta e das de dentro
-              </button>
-            </div>
-          )}
-
-          {!emBusca &&
-            conteudo &&
-            !conteudo.pastas.length &&
-            !conteudo.arquivos.length &&
-            !tudo && <div className="empty">Esta pasta está vazia.</div>}
         </>
       )}
 

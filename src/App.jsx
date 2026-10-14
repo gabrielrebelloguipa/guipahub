@@ -6,7 +6,7 @@ import Hoje from "./abas/Hoje.jsx";
 import Kanban from "./abas/Kanban.jsx";
 import Central from "./abas/Central.jsx";
 import Marcas from "./abas/Marcas.jsx";
-import Clientes from "./abas/Clientes.jsx";
+import Imagens from "./abas/Clientes.jsx";
 import Prompts from "./abas/Prompts.jsx";
 import Configuracoes from "./abas/Configuracoes.jsx";
 import { useAuth } from "./lib/useAuth.js";
@@ -27,7 +27,7 @@ const TITULOS = {
   demandas: ["Kanban", "Arraste os cartões entre as colunas"],
   central: ["Central Guipa", "Material oficial da GUIPA"],
   marcas: ["Marcas", "Cadastro compartilhado — alimenta os quadros por empresa"],
-  clientes: ["Clientes", "Busque o cliente e veja tudo que já foi feito para ele"],
+  clientes: ["Imagens", "O acervo de imagens dos clientes, direto do Drive"],
   prompts: ["Prompts", "Os prompts que você reusa, prontos pra copiar"],
   config: ["Configurações", "Permissões do time e de onde vem o acervo"],
 };
@@ -105,7 +105,7 @@ export default function App() {
             {secao === "demandas" && <Kanban busca={busca} />}
             {secao === "central" && <Central busca={busca} />}
             {secao === "marcas" && <Marcas busca={busca} />}
-            {secao === "clientes" && <Clientes busca={busca} />}
+            {secao === "clientes" && <Imagens busca={busca} />}
             {secao === "prompts" && <Prompts busca={busca} />}
             {secao === "config" && <Configuracoes />}
           </div>

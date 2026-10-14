@@ -22,7 +22,10 @@ export const ABAS = [
   { key: "demandas", label: "Kanban", ico: "≡" },
   { key: "central", label: "Central Guipa", ico: "◆" },
   { key: "marcas", label: "Marcas", ico: "◑" },
-  { key: "clientes", label: "Clientes", ico: "▧" },
+  /* A chave continua "clientes" de proposito: ela esta gravada nas
+     permissoes de cada pessoa no banco. Trocar a chave apagaria a
+     permissao de quem ja a tinha. So o rotulo mudou. */
+  { key: "clientes", label: "Imagens", ico: "▧" },
   { key: "prompts", label: "Prompts", ico: "✦" },
 ];
 

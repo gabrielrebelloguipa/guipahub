@@ -62,7 +62,7 @@ export default function Sidebar({ secao, aoTrocar }) {
 
       <div className="side-foot">
         <div className="hint">
-          Clientes vêm do Drive. O resto fica só neste navegador.
+          As imagens vêm do Drive. O resto fica só neste navegador.
         </div>
       </div>
     </aside>

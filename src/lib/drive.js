@@ -255,7 +255,10 @@ export function listarFilhos(pastaId) {
         if (f.mimeType === PASTA) {
           cachePasta.set(f.id, { id: f.id, name: f.name, parents: f.parents });
           pastas.push({ id: f.id, nome: f.name });
-        } else if (/^image\/|^video\//.test(f.mimeType)) {
+        } else {
+          /* Todo arquivo, nao so imagem e video: o acervo tem PSD, AI,
+             prproj e PDF, e esconder isso fazia a pasta parecer vazia
+             quando nao estava. Quem filtra e a tela. */
           arquivos.push(f);
         }
       }
@@ -326,9 +329,7 @@ export function buscarNoAcervo(termo) {
     const t = escapaQ(termo);
     const [rArq, rPas] = await Promise.all([
       pedir("files", {
-        q:
-          `name contains '${t}' and trashed=false and ` +
-          `(mimeType contains 'image/' or mimeType contains 'video/')`,
+        q: `name contains '${t}' and trashed=false and mimeType != '${PASTA}'`,
         fields: `files(${CAMPOS_ARQ})`,
         pageSize: 200,
         orderBy: "name",
@@ -422,7 +423,7 @@ export function listarMidias(pastaId) {
         });
         for (const f of r.files || []) {
           if (f.mimeType === PASTA) fila.push(f.id);
-          else if (/^image\/|^video\//.test(f.mimeType)) achados.push(f);
+          else achados.push(f);
         }
         pageToken = r.nextPageToken;
       } while (pageToken && achados.length < TETO_ARQUIVOS);
@@ -447,6 +448,25 @@ export function baixarBlob(f) {
 
 export function ehVideo(f) {
   return /^video\//.test(f.mimeType);
+}
+
+export function ehImagem(f) {
+  return /^image\//.test(f.mimeType);
+}
+
+/* Tres baldes, porque e assim que a pessoa pensa ao filtrar: "quero so
+   imagem", "quero so video", "quero o arquivo editavel". */
+export function tipoDe(f) {
+  if (ehImagem(f)) return "imagem";
+  if (ehVideo(f)) return "video";
+  return "outro";
+}
+
+/* Nome curto da extensao, para o cartao de arquivo que nao tem
+   miniatura: "PSD" diz mais que um icone generico. */
+export function extensaoDe(f) {
+  const m = /\.([a-z0-9]{1,5})$/i.exec(f.name || "");
+  return m ? m[1].toUpperCase() : "ARQ";
 }
 
 /* thumbnailLink vem com sufixo de tamanho (=s220). Trocar por um maior
