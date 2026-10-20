@@ -191,11 +191,15 @@ begin
        public.email_da_sessao(), public.nome_da_sessao());
   end if;
 
-  if new.titulo      is distinct from old.titulo      then mudou := mudou || 'título'; end if;
-  if new.solicitante is distinct from old.solicitante then mudou := mudou || 'solicitante'; end if;
-  if new.prazo       is distinct from old.prazo       then mudou := mudou || 'prazo'; end if;
-  if new.prioridade  is distinct from old.prioridade  then mudou := mudou || 'prioridade'; end if;
-  if new.notas       is distinct from old.notas       then mudou := mudou || 'notas'; end if;
+  -- array_append e nao `mudou || 'campo'`: com ||, o Postgres le o texto
+  -- solto como uma LISTA mal escrita ("malformed array literal") e o
+  -- gatilho derruba a edicao inteira. Foi o teste com transacao desfeita
+  -- que pegou isso -- editar cartao em quadro de marca estava falhando.
+  if new.titulo      is distinct from old.titulo      then mudou := array_append(mudou, 'título'); end if;
+  if new.solicitante is distinct from old.solicitante then mudou := array_append(mudou, 'solicitante'); end if;
+  if new.prazo       is distinct from old.prazo       then mudou := array_append(mudou, 'prazo'); end if;
+  if new.prioridade  is distinct from old.prioridade  then mudou := array_append(mudou, 'prioridade'); end if;
+  if new.notas       is distinct from old.notas       then mudou := array_append(mudou, 'notas'); end if;
 
   if array_length(mudou, 1) > 0 then
     -- O cartão salva a cada tecla. Sem isto, digitar uma nota de 200
