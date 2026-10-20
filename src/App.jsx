@@ -10,7 +10,7 @@ import Imagens from "./abas/Clientes.jsx";
 import Prompts from "./abas/Prompts.jsx";
 import Configuracoes from "./abas/Configuracoes.jsx";
 import { useAuth } from "./lib/useAuth.js";
-import { restaurarSessao, pedirToken, temSessao } from "./lib/auth.js";
+import { restaurarSessao, tokenValido, renovarAcessoDrive } from "./lib/auth.js";
 import { verificarAcesso } from "./lib/drive.js";
 import { iniciar as iniciarCompartilhado } from "./lib/compartilhado.js";
 import {
@@ -37,14 +37,21 @@ export default function App() {
   const [secao, setSecao] = useState("hoje");
   const [busca, setBusca] = useState("");
 
-  /* O perfil sobrevive ao fechar a aba; o token de acesso não (vale 1h).
-     Por isso a volta é: restaura quem era e pede um token novo em
-     silêncio. Se o consentimento ainda valer, ninguém vê popup — e o
-     "deixar logado" acontece. Se não valer, cai na tela de login. */
   useEffect(() => {
     restaurarSessao();
-    if (temSessao()) pedirToken(true, null);
   }, []);
+
+  /* Sessão de pé mas sem token do Drive — porque passou da hora de vida
+     dele. Busca um novo sem perguntar nada: como não pedimos mais a tela
+     de consentimento, é um piscar de redirecionamento e a pessoa volta
+     para onde estava.
+
+     Isto roda depois que o perfil chega, e não na montagem: restaurar a
+     sessão é assíncrono, então perguntar "tem sessão?" na linha seguinte
+     respondia não mesmo quando havia. */
+  useEffect(() => {
+    if (auth.perfil && !tokenValido()) renovarAcessoDrive();
+  }, [auth.perfil?.email, auth.expirou]);
 
   /* Carrega os dados compartilhados uma vez, depois de ter sessao —
      sem sessao o banco recusa tudo, entao pedir antes seria uma ida

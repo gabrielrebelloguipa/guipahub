@@ -57,9 +57,11 @@ function AvisoDeAcesso() {
   if (auth.expirou)
     return (
       <div className="banner">
-        <b>Sua sessão do Google expirou. </b>
-        Ela vale uma hora e o navegador não conseguiu renovar sozinho. Entrar de
-        novo leva um clique e não perde nada.
+        <b>O acesso ao Drive não renovou. </b>
+        Ele vale uma hora e o site tenta renovar sozinho, sem perguntar nada.
+        Essa tentativa não deu certo — normalmente porque a permissão de
+        leitura do Drive foi retirada na conta do Google. Entrar de novo leva
+        um clique e não perde nada do que você estava fazendo.
         <div className="chips" style={{ marginTop: 10 }}>
           <button className="btn primary sm" type="button" onClick={() => pedirToken(false, null)}>
             Entrar de novo

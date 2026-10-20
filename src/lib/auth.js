@@ -24,6 +24,13 @@ import { supabase, temSupabase } from "./supabase.js";
 
 const ESCOPOS_DRIVE = "https://www.googleapis.com/auth/drive.readonly";
 const PROVIDER_TOKEN_KEY = "guipahub_provider_token";
+const RENOVOU_KEY = "guipahub_renovou_drive";
+
+/* O Google nao diz quando o token vence junto com ele; o padrao e uma
+   hora. Guardamos 55 minutos para nunca usar um token morto achando que
+   esta vivo -- o Drive responderia 401 e a pessoa veria erro em vez de
+   uma renovacao silenciosa. */
+const VIDA_TOKEN_MS = 55 * 60 * 1000;
 
 /* ---------- estado observável ---------- */
 
@@ -59,23 +66,41 @@ function mudar(patch) {
    o que é desenhado. Se entrasse lá, cada renovação redesenharia o app. */
 let providerToken = lerProviderToken();
 
+/* localStorage e nao sessionStorage. A escolha anterior era mais segura
+   no papel -- o token morria junto com a aba -- e horrivel na pratica:
+   fechar o navegador e voltar dez minutos depois exigia login novo,
+   mesmo com o token ainda valido. Como ele vence em uma hora de
+   qualquer jeito, a janela de exposicao e praticamente a mesma; o que
+   muda e nao obrigar a pessoa a reentrar varias vezes por dia.
+
+   Guardado junto com o instante de validade, para saber se ainda serve
+   sem ter que perguntar ao Google. */
 function lerProviderToken() {
   try {
-    return sessionStorage.getItem(PROVIDER_TOKEN_KEY) || "";
+    const bruto = localStorage.getItem(PROVIDER_TOKEN_KEY);
+    if (!bruto) return "";
+    const { t, exp } = JSON.parse(bruto);
+    if (!t || !exp || Date.now() >= exp) {
+      localStorage.removeItem(PROVIDER_TOKEN_KEY);
+      return "";
+    }
+    return t;
   } catch {
     return "";
   }
 }
 
-/* sessionStorage e não localStorage: o token do Drive morre quando a aba
-   fecha, que é o comportamento certo para credencial de curta duração. */
 function guardarProviderToken(t) {
   providerToken = t || "";
   try {
-    if (t) sessionStorage.setItem(PROVIDER_TOKEN_KEY, t);
-    else sessionStorage.removeItem(PROVIDER_TOKEN_KEY);
+    if (t)
+      localStorage.setItem(
+        PROVIDER_TOKEN_KEY,
+        JSON.stringify({ t, exp: Date.now() + VIDA_TOKEN_MS })
+      );
+    else localStorage.removeItem(PROVIDER_TOKEN_KEY);
   } catch {
-    /* sem sessionStorage o token vale só enquanto a página estiver aberta */
+    /* sem localStorage o token vale só enquanto a página estiver aberta */
   }
 }
 
@@ -86,6 +111,10 @@ export function temSessao() {
   return !!estado.perfil;
 }
 export function tokenValido() {
+  /* Rele do armazenamento em vez de confiar na variavel: com a aba
+     aberta por mais de uma hora, a variavel segue preenchida e o token
+     ja morreu. */
+  if (providerToken && !lerProviderToken()) providerToken = "";
   return !!providerToken;
 }
 
@@ -171,16 +200,23 @@ export async function pedirToken(silencioso, depois) {
 
   mudar({ entrando: true, erro: "" });
 
-  /* `hd` restringe o seletor de contas ao domínio, e `prompt: consent`
-     garante que a autorização do Drive seja pedida de novo quando o
-     provider_token tiver vencido. */
+  /* `hd` restringe o seletor de contas ao dominio da GUIPA.
+     NAO pedimos `prompt: consent`. Ela estava aqui com a justificativa de
+     "renovar a autorizacao do Drive quando o token vencer", o que e
+     falso: um login normal ja devolve token novo. O que ela fazia de
+     fato era OBRIGAR a tela de aprovacao do Google a aparecer em toda
+     entrada -- varias vezes por dia, para a mesma pessoa, aprovando
+     exatamente o que ja tinha aprovado.
+     `access_type: offline` sai junto: so serve para receber um refresh
+     token, que exige o segredo do cliente para ser trocado. Segredo nao
+     pode viver no JavaScript do site, entao esse token nunca teve uso. */
   try {
     const { error } = await comPrazo(
       supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
           scopes: ESCOPOS_DRIVE,
-          queryParams: { hd: DOMINIO_OK, prompt: "consent", access_type: "offline" },
+          queryParams: { hd: DOMINIO_OK },
           redirectTo: window.location.origin,
         },
       })
@@ -201,10 +237,30 @@ export function comToken(fn) {
     fn();
     return;
   }
-  /* Sem token do Drive não adianta tentar renovar em silêncio: o Supabase
-     não renova provider_token. Marca como expirado e deixa a interface
-     oferecer o botão de entrar de novo. */
+  /* O Supabase nao renova o provider_token, entao renovar significa uma
+     ida ao Google. Sem a tela de consentimento isso virou um piscar de
+     redirecionamento, e nao vale incomodar a pessoa com um botao. */
+  if (renovarAcessoDrive()) return;
   mudar({ expirou: true });
+}
+
+/* Uma ida ao Google para buscar token novo do Drive, sem perguntar nada.
+   Devolve true se foi tentada.
+
+   O trinco de uma tentativa por sessao e o que impede laco infinito: se
+   a pessoa tirou a permissao do Drive na tela do Google, a volta vem sem
+   provider_token, e sem o trinco o app sairia renovando para sempre.
+   Falhando uma vez, a interface passa a mostrar o botao e explicar. */
+export function renovarAcessoDrive() {
+  if (!temSessao()) return false;
+  try {
+    if (sessionStorage.getItem(RENOVOU_KEY) === "1") return false;
+    sessionStorage.setItem(RENOVOU_KEY, "1");
+  } catch {
+    return false;
+  }
+  pedirToken(false, null);
+  return true;
 }
 
 export async function sair() {
@@ -246,7 +302,16 @@ function aplicarSessao(sessao) {
     return;
   }
 
-  if (sessao.provider_token) guardarProviderToken(sessao.provider_token);
+  if (sessao.provider_token) {
+    guardarProviderToken(sessao.provider_token);
+    /* Deu certo: destranca a renovacao automatica para a proxima vez que
+       o token vencer, daqui a uma hora. */
+    try {
+      sessionStorage.removeItem(RENOVOU_KEY);
+    } catch {
+      /* sem sessionStorage a renovacao automatica so nao acontece */
+    }
+  }
 
   mudar({
     perfil,
