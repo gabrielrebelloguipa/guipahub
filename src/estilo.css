@@ -1038,18 +1038,19 @@
   .tarefa-salvo { margin-left: auto; color: var(--ok); }
 
   /* painel da direita */
-  .painel-abas { display: flex; gap: 4px; padding: 3px; border-radius: 10px; background: var(--surface-2); margin-bottom: 14px; }
-  .painel-aba {
-    flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-    padding: 8px 10px; border: 0; border-radius: 8px; background: none; cursor: pointer;
-    font: inherit; font-size: 0.84rem; font-weight: 700; color: var(--text-dim);
-  }
-  .painel-aba.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .18); }
+  .painel-titulo { margin-top: 4px; margin-bottom: 14px; }
   .painel-n {
-    min-width: 20px; padding: 1px 6px; border-radius: 999px; font-size: 0.7rem;
-    background: var(--border); color: var(--text);
+    min-width: 20px; padding: 1px 7px; border-radius: 999px; font-size: 0.7rem; letter-spacing: 0;
+    background: var(--accent); color: var(--accent-ink); text-align: center;
   }
-  .painel-aba.on .painel-n { background: var(--accent); color: var(--accent-ink); }
+  /* Atividade no meio dos comentários: ícone do tamanho do avatar, para
+     tudo alinhar na mesma coluna, mas sem fundo — é nota de rodapé, não
+     fala de ninguém. */
+  .coment-lista .hist-item { padding: 0; align-items: center; }
+  .coment-lista .hist-ico { width: 32px; height: 22px; background: none; font-size: 0.8rem; }
+  .coment-lista .hist-corpo { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+  .coment-lista .hist-frase { font-size: 0.8rem; color: var(--text-dim); }
+  .coment-lista .hist-quando { margin: 0; }
   .painel-vazio {
     text-align: center; padding: 28px 12px; font-size: 0.84rem; color: var(--text-dim);
     border: 1px dashed var(--border); border-radius: 10px;
