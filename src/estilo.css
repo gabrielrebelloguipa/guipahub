@@ -8,19 +8,28 @@
      --accent-text = laranja legível para TEXTO pequeno (o oficial
                      puro dá ~3:1 sobre branco, abaixo do mínimo)
      =========================================================== */
+  /* Claro com contraste de verdade: fundo cinza-azulado, o que é
+     superfície (coluna, card, modal) em branco com borda visível, texto
+     secundário escuro o bastante para ler, e a barra lateral em
+     azul-noite da marca, que ancora a tela. A primeira versão era tudo
+     quase branco sobre quase branco. */
   :root {
-    --bg: #f3f3f1;
-    --surface: #fdfdfd;
-    --surface-2: #e8e8e5;
-    --sidebar-bg: #fdfdfd;
-    --topbar-bg: #fdfdfd;
-    --border: #dcdcd7;
+    --bg: #e2e7eb;
+    --surface: #ffffff;
+    --surface-2: #d4dbe1;
+    --sidebar-bg: #151d23;
+    --topbar-bg: #ffffff;
+    --border: #b9c3cb;
     --text: #151d23;
-    --text-dim: #6a747c;
+    --text-dim: #48535c;
+    --muted: #5c6770;
+    --sidebar-text: #fdfdfd; --sidebar-dim: #b4bdc4; --sidebar-hover: #293945;
+    --sidebar-ativo: #3a2415; --sidebar-ativo-texto: #ff8b2e; --sidebar-borda: #151d23;
+    --sombra-cartao: 0 1px 2px rgba(21, 29, 35, 0.14);
     --accent: #f76e00;
-    --accent-text: #c25400;
+    --accent-text: #b04c00;
     --accent-ink: #151d23;
-    --accent-soft: #fde7d5;
+    --accent-soft: #fbd8bb;
     --danger: #c0392b;
     --ok: #3f7d4e;
     --warn: #b3822b;
@@ -37,6 +46,10 @@
       --accent-soft: #3a2415;
       --danger: #e2705d; --ok: #6fae7e; --warn: #d6ab55;
       --menu-shadow: 0 14px 36px -14px rgba(0, 0, 0, 0.75);
+      --muted: #8f9aa3;
+      --sidebar-text: #fdfdfd; --sidebar-dim: #afafaf; --sidebar-hover: #293945;
+      --sidebar-ativo: #3a2415; --sidebar-ativo-texto: #ff8b2e; --sidebar-borda: #32434f;
+      --sombra-cartao: none;
       color-scheme: dark;
     }
   }
@@ -48,14 +61,21 @@
     --accent-soft: #3a2415;
     --danger: #e2705d; --ok: #6fae7e; --warn: #d6ab55;
     --menu-shadow: 0 14px 36px -14px rgba(0, 0, 0, 0.75);
+    --muted: #8f9aa3;
+    --sidebar-text: #fdfdfd; --sidebar-dim: #afafaf; --sidebar-hover: #293945;
+    --sidebar-ativo: #3a2415; --sidebar-ativo-texto: #ff8b2e; --sidebar-borda: #32434f;
+    --sombra-cartao: none;
     color-scheme: dark;
   }
   :root[data-theme="light"] {
-    --bg: #f3f3f1; --surface: #fdfdfd; --surface-2: #e8e8e5;
-    --sidebar-bg: #fdfdfd; --topbar-bg: #fdfdfd; --border: #dcdcd7;
-    --text: #151d23; --text-dim: #6a747c;
-    --accent: #f76e00; --accent-text: #c25400; --accent-ink: #151d23;
-    --accent-soft: #fde7d5;
+    --bg: #e2e7eb; --surface: #ffffff; --surface-2: #d4dbe1;
+    --sidebar-bg: #151d23; --topbar-bg: #ffffff; --border: #b9c3cb;
+    --text: #151d23; --text-dim: #48535c; --muted: #5c6770;
+    --sidebar-text: #fdfdfd; --sidebar-dim: #b4bdc4; --sidebar-hover: #293945;
+    --sidebar-ativo: #3a2415; --sidebar-ativo-texto: #ff8b2e; --sidebar-borda: #151d23;
+    --sombra-cartao: 0 1px 2px rgba(21, 29, 35, 0.14);
+    --accent: #f76e00; --accent-text: #b04c00; --accent-ink: #151d23;
+    --accent-soft: #fbd8bb;
     --danger: #c0392b; --ok: #3f7d4e; --warn: #b3822b;
     --menu-shadow: 0 14px 36px -14px rgba(21, 29, 35, 0.32);
     color-scheme: light;
@@ -86,7 +106,8 @@
   /* ================= sidebar ================= */
   .sidebar {
     width: 218px; flex-shrink: 0;
-    background: var(--sidebar-bg); border-right: 1px solid var(--border);
+    background: var(--sidebar-bg); border-right: 1px solid var(--sidebar-borda);
+    color: var(--sidebar-text);
     display: flex; flex-direction: column; padding: 18px 12px; gap: 20px;
   }
   .side-brand { padding: 0 10px; display: flex; align-items: center; gap: 9px; }
@@ -98,28 +119,28 @@
   }
   .side-brand .name { font-size: 0.92rem; font-weight: 700; line-height: 1.2; }
   .side-brand .tag {
-    font-size: 0.62rem; color: var(--text-dim);
+    font-size: 0.62rem; color: var(--sidebar-dim); background: var(--sidebar-hover);
     text-transform: uppercase; letter-spacing: 0.09em;
   }
   .side-nav { display: flex; flex-direction: column; gap: 2px; }
   .nav-item {
     display: flex; align-items: center; gap: 10px;
     padding: 9px 10px; border-radius: 8px; border: none; background: none;
-    color: var(--text-dim); font-size: 0.88rem;
+    color: var(--sidebar-dim); font-size: 0.88rem;
     cursor: pointer; text-align: left; width: 100%;
     transition: background 0.14s, color 0.14s;
   }
   .nav-item .ico { width: 18px; text-align: center; flex-shrink: 0; opacity: 0.85; }
-  .nav-item:hover { background: var(--surface-2); color: var(--text); }
-  .nav-item.active { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
+  .nav-item:hover { background: var(--sidebar-hover); color: var(--sidebar-text); }
+  .nav-item.active { background: var(--sidebar-ativo); color: var(--sidebar-ativo-texto); font-weight: 600; }
   .nav-item .count {
     margin-left: auto; font-size: 0.72rem;
-    background: var(--surface-2); color: var(--text-dim);
+    background: var(--sidebar-hover); color: var(--sidebar-dim);
     border-radius: 999px; padding: 1px 7px; font-variant-numeric: tabular-nums;
   }
   .nav-item.active .count { background: var(--accent); color: var(--accent-ink); }
   .side-foot { margin-top: auto; padding: 0 10px; }
-  .side-foot .hint { font-size: 0.68rem; color: var(--text-dim); line-height: 1.5; }
+  .side-foot .hint { font-size: 0.68rem; color: var(--sidebar-dim); line-height: 1.5; }
 
   /* ================= coluna direita ================= */
   .col { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
@@ -408,6 +429,7 @@
   }
   .cartao {
     background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: var(--sombra-cartao);
     padding: 9px 11px; cursor: pointer; text-align: left; width: 100%; color: var(--text);
     display: block; border-left: 3px solid var(--border);
   }
@@ -944,10 +966,10 @@
      confundir com rótulo ou fundo. A cor da lista aparece no topo e no
      seletor, para saber onde o cartão está sem precisar ler. */
   :root {
-    --campo-bg: #ffffff; --campo-texto: #151d23; --campo-borda: #cfd4d8; --campo-dica: #8a949b;
-    --tarefa-esq: #f6f5f2; --tarefa-dir: #eaeff3;
-    --bolha-minha: #fde7d5; --bolha-minha-borda: #f7b47a;
-    --bolha-outro: #ffffff; --bolha-outro-borda: #d5dce1;
+    --campo-bg: #ffffff; --campo-texto: #151d23; --campo-borda: #aeb8c1; --campo-dica: #6f7a83;
+    --tarefa-esq: #eef1f4; --tarefa-dir: #e2e7eb;
+    --bolha-minha: #fde3cd; --bolha-minha-borda: #f2a462;
+    --bolha-outro: #ffffff; --bolha-outro-borda: #c3ccd3;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -962,9 +984,9 @@
     --bolha-outro: #24323c; --bolha-outro-borda: #3a4d5a;
   }
   :root[data-theme="light"] {
-    --campo-borda: #cfd4d8; --tarefa-esq: #f6f5f2; --tarefa-dir: #eaeff3;
-    --bolha-minha: #fde7d5; --bolha-minha-borda: #f7b47a;
-    --bolha-outro: #ffffff; --bolha-outro-borda: #d5dce1;
+    --campo-borda: #aeb8c1; --tarefa-esq: #eef1f4; --tarefa-dir: #e2e7eb;
+    --bolha-minha: #fde3cd; --bolha-minha-borda: #f2a462;
+    --bolha-outro: #ffffff; --bolha-outro-borda: #c3ccd3;
   }
 
   .modal.tarefa {
