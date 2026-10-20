@@ -24,7 +24,7 @@ export default function Kanban({ busca }) {
 
   /* Duas fontes de dados, uma interface. O `api` do quadro é montado com
      o par ler/gravar de cada lado — o componente Quadro não sabe se está
-     mexendo no localStorage de quem usa ou no quadro de uma empresa. */
+     mexendo no localStorage de quem usa ou no quadro de uma marca. */
   const apiPessoal = useMemo(
     () =>
       criarApi(
@@ -38,7 +38,7 @@ export default function Kanban({ busca }) {
     []
   );
 
-  /* As operacoes do quadro de empresa moram no compartilhado: elas
+  /* As operacoes do quadro de marca moram no compartilhado: elas
      precisam saber falar SQL quando o Supabase estiver ligado, o que
      o criarApi generico (que so troca objetos) nao faz. */
   const apiEmpresa = useMemo(
@@ -62,7 +62,7 @@ export default function Kanban({ busca }) {
             className={modo === "empresas" ? "on" : ""}
             onClick={() => alterarPessoal({ kanbanModo: "empresas" })}
           >
-            Empresas
+            Marcas
           </button>
         </div>
 
@@ -77,7 +77,7 @@ export default function Kanban({ busca }) {
                 padding: "7px 10px", fontSize: "0.84rem", fontFamily: "inherit",
               }}
             >
-              <option value="">— escolha a empresa —</option>
+              <option value="">— escolha a marca —</option>
               {marcas.map((m) => {
                 const tem = !!quadroDaMarca(compartilhado, m.id);
                 return (
@@ -116,12 +116,12 @@ export default function Kanban({ busca }) {
         </>
       ) : !marcas.length ? (
         <div className="empty">
-          Nenhuma marca cadastrada ainda. Os quadros de empresa saem do cadastro
-          de marcas — cadastre a primeira na aba Marcas.
+          Nenhuma marca cadastrada ainda. Os quadros saem do cadastro de
+          marcas — cadastre a primeira na aba Marcas.
         </div>
       ) : !marca ? (
         <div className="empty">
-          Escolha uma empresa no seletor acima para ver o quadro dela.
+          Escolha uma marca no seletor acima para ver o quadro dela.
         </div>
       ) : !quadro ? (
         <div className="empty">

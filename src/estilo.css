@@ -667,3 +667,31 @@
     font-size: 0.78rem; font-weight: 700; letter-spacing: .06em;
     color: var(--muted); background: var(--surface-2);
   }
+
+  /* ---------- arrastar colunas do quadro ---------- */
+
+  /* O cabecalho e a alca: o cursor precisa dizer isso antes do gesto. */
+  .lista-h { cursor: grab; touch-action: none; }
+  .lista-h:active { cursor: grabbing; }
+  /* O que vive dentro do cabecalho nao e alca. */
+  .lista-h button, .lista-h input, .lista-h .lista-menu { cursor: default; }
+  .lista-h .nm { cursor: inherit; }
+
+  /* O vazio que abre onde a coluna vai cair. */
+  .placeholder-lista {
+    flex: none; width: 272px; min-height: 120px; border-radius: var(--radius);
+    border: 2px dashed var(--accent); background: var(--accent-soft);
+    opacity: .5;
+  }
+
+  /* A coluna em voo segue o cursor, inclinada -- e o que diferencia
+     "estou arrastando" de "a tela travou". */
+  .lista-em-voo {
+    position: fixed; z-index: 90; pointer-events: none;
+    transform: translate(-50%, -16px) rotate(2.5deg);
+    padding: 10px 14px; border-radius: var(--radius);
+    background: var(--surface); border: 1px solid var(--accent);
+    box-shadow: var(--menu-shadow);
+    font-size: 0.9rem; font-weight: 600; color: var(--text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }

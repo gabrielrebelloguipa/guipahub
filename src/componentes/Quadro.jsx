@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { PRIORIDADES, LISTA_CORES, hojeChave, fmtData, diasAte } from "../lib/constantes.js";
 import Modal, { Confirmar } from "./Modal.jsx";
-import { useArrastar } from "../lib/useArrastar.js";
+import { useArrastar, useArrastarColuna } from "../lib/useArrastar.js";
 import CartaoEmVoo from "./CartaoEmVoo.jsx";
 
 /* O quadro, sem saber de onde vêm os dados.
@@ -189,7 +189,7 @@ function MenuLista({ lista, listas, api, aoFechar }) {
   );
 }
 
-function Coluna({ lista, listas, tarefas, alvo, pegar, api, aoAbrir }) {
+function Coluna({ lista, listas, tarefas, alvo, pegar, pegarColuna, api, aoAbrir }) {
   const [menuAberto, setMenuAberto] = useState(false);
   const [editandoNome, setEditandoNome] = useState(false);
   const [novoCartao, setNovoCartao] = useState(null);
@@ -205,8 +205,16 @@ function Coluna({ lista, listas, tarefas, alvo, pegar, api, aoAbrir }) {
   }
 
   return (
-    <div className={"lista" + (destaque ? " alvo" : "")} data-coluna={lista.id}>
-      <div className="lista-h" onClick={() => setMenuAberto(false)}>
+    <div
+      className={"lista" + (destaque ? " alvo" : "")}
+      data-coluna={lista.id}
+    >
+      <div
+        className="lista-h"
+        onClick={() => setMenuAberto(false)}
+        onPointerDown={(e) => pegarColuna(e, lista.id, lista.nome)}
+        title="Arraste pelo cabeçalho para reordenar"
+      >
         <span className="dot" style={{ background: lista.cor }} />
         {editandoNome ? (
           <input
@@ -306,6 +314,7 @@ function Coluna({ lista, listas, tarefas, alvo, pegar, api, aoAbrir }) {
 export default function Quadro({ listas, demandas, api, busca }) {
   const [aberta, setAberta] = useState(null);
   const { pegar, voando, alvo } = useArrastar({ aoSoltar: api.moverTarefa });
+  const col = useArrastarColuna({ aoSoltar: api.reordenarLista });
 
   const filtradas = demandas.filter((d) =>
     busca
@@ -324,21 +333,50 @@ export default function Quadro({ listas, demandas, api, busca }) {
       </div>
 
       <div className="board">
-        {listas.map((L) => (
-          <Coluna
-            key={L.id}
-            lista={L}
-            listas={listas}
-            tarefas={filtradas.filter((d) => d.status === L.id)}
-            alvo={alvo}
-            pegar={pegar}
-            api={api}
-            aoAbrir={setAberta}
-          />
-        ))}
+        {(() => {
+          /* A coluna em voo some da fila e o vazio onde ela vai cair é
+             desenhado na posição do índice. Sem isso o arraste não diz
+             onde vai parar — a pessoa solta no escuro. */
+          const semEla = col.voando
+            ? listas.filter((L) => L.id !== col.voando.id)
+            : listas;
+          const saida = [];
+          semEla.forEach((L, i) => {
+            if (col.indice === i)
+              saida.push(<div className="placeholder-lista" key="ph" />);
+            saida.push(
+              <Coluna
+                key={L.id}
+                lista={L}
+                listas={listas}
+                tarefas={filtradas.filter((d) => d.status === L.id)}
+                alvo={alvo}
+                pegar={pegar}
+                pegarColuna={col.pegar}
+                api={api}
+                aoAbrir={setAberta}
+              />
+            );
+          });
+          if (col.indice === semEla.length)
+            saida.push(<div className="placeholder-lista" key="ph-fim" />);
+          return saida;
+        })()}
       </div>
 
       <CartaoEmVoo voando={voando} />
+      {col.voando && (
+        <div
+          className="lista-em-voo"
+          style={{
+            left: col.voando.x,
+            top: col.voando.y,
+            width: col.voando.w,
+          }}
+        >
+          {col.voando.nome}
+        </div>
+      )}
       {aberta && (
         <CartaoModal
           tarefa={aberta}
@@ -425,6 +463,18 @@ export function criarApi(ler, gravar, uid) {
       if (i < 0 || j < 0 || j >= listas.length) return;
       const arr = [...listas];
       [arr[i], arr[j]] = [arr[j], arr[i]];
+      gravar({ listas: arr });
+    },
+
+    /* No quadro pessoal a ordem e a da propria lista, entao reordenar e
+       tirar e por de volta. `indice` ja conta a fila sem a arrastada. */
+    reordenarLista(id, indice) {
+      const { listas } = ler();
+      const i = listas.findIndex((L) => L.id === id);
+      if (i < 0) return;
+      const arr = [...listas];
+      const [L] = arr.splice(i, 1);
+      arr.splice(indice, 0, L);
       gravar({ listas: arr });
     },
 

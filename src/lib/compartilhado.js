@@ -516,6 +516,59 @@ export function apiQuadroEmpresa(quadroId) {
       else await carregarRemoto();
     },
 
+    /* Arrastar solta a coluna numa POSIÇÃO, não um passo para o lado.
+       Mesma ideia do `ordem` fracionário dos cartões: a nova ordem é a
+       média entre os dois vizinhos do destino, então mover é um UPDATE
+       só e duas pessoas arrastando ao mesmo tempo não se atropelam.
+
+       `indice` conta a fila JÁ SEM a coluna arrastada — é o que a tela
+       mostra enquanto ela está em voo, e evita o erro de meio item que
+       aparece quando se tenta converter de uma contagem para a outra. */
+    async reordenarLista(id, indice) {
+      const q = atual();
+      const arr = [...q.listas].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
+      const semEla = arr.filter((L) => L.id !== id);
+      if (semEla.length === arr.length) return;
+
+      const antes = semEla[indice - 1];
+      const depois = semEla[indice];
+      const oA = antes ? antes.ordem ?? 0 : null;
+      const oD = depois ? depois.ordem ?? 0 : null;
+
+      let nova;
+      if (oA === null && oD === null) nova = 0;
+      else if (oA === null) nova = oD - 1;
+      else if (oD === null) nova = oA + 1;
+      else nova = (oA + oD) / 2;
+
+      /* Vizinhos com a mesma ordem (quadro antigo, antes do fracionário)
+         fazem a média cair em cima de um deles e o arraste não sai do
+         lugar. Aí não tem jeito: renumera a fila inteira uma vez. */
+      if (oA !== null && oD !== null && oA === oD) {
+        const fila = [...semEla];
+        fila.splice(indice, 0, arr.find((L) => L.id === id));
+        if (!REMOTO) {
+          local({ listas: fila.map((L, k) => ({ ...L, ordem: k })) });
+          return;
+        }
+        const rs = await Promise.all(
+          fila.map((L, k) => supabase.from("listas").update({ ordem: k }).eq("id", L.id))
+        );
+        const e = rs.find((r) => r.error);
+        if (e) definir({ erro: explicarErro(e.error) });
+        else await carregarRemoto();
+        return;
+      }
+
+      if (!REMOTO) {
+        local({ listas: q.listas.map((L) => (L.id === id ? { ...L, ordem: nova } : L)) });
+        return;
+      }
+      const { error } = await supabase.from("listas").update({ ordem: nova }).eq("id", id);
+      if (error) definir({ erro: explicarErro(error) });
+      else await carregarRemoto();
+    },
+
     async excluirLista(id) {
       const q = atual();
       const restantes = q.listas.filter((L) => L.id !== id);

@@ -101,3 +101,84 @@ export function useArrastar({ aoSoltar }) {
 
   return { pegar, voando, alvo, arrastando: !!voando };
 }
+
+/* Arraste das COLUNAS, que é o mesmo gesto num eixo diferente.
+
+   Não dá para reaproveitar o gancho de cima: lá a alça e o que viaja são
+   o mesmo elemento, e aqui não — pega-se pelo cabeçalho e a coluna
+   inteira se move. E a comparação é com o meio horizontal de cada
+   coluna, não o vertical de cada cartão.
+
+   Vem do protótipo em arquivo único, onde isto já funcionava; o que
+   mudou é só a forma, de manipular o DOM direto para devolver estado. */
+export function useArrastarColuna({ aoSoltar }) {
+  const [voando, setVoando] = useState(null); /* { id, nome, x, y, w } */
+  const [indice, setIndice] = useState(null); /* onde a coluna cairia */
+  const ref = useRef({ ativo: false, id: null, x0: 0, y0: 0, largura: 0, nome: "" });
+  const indiceRef = useRef(null);
+
+  const mover = useCallback((ev) => {
+    const st = ref.current;
+    if (!st.id) return;
+
+    if (!st.ativo) {
+      if (Math.hypot(ev.clientX - st.x0, ev.clientY - st.y0) < FOLGA) return;
+      st.ativo = true;
+      setVoando({ id: st.id, nome: st.nome, x: ev.clientX, y: ev.clientY, w: st.largura });
+    } else {
+      setVoando((v) => (v ? { ...v, x: ev.clientX, y: ev.clientY } : v));
+    }
+
+    /* A coluna arrastada sai da conta: comparar com ela mesma faria o
+       índice oscilar entre dois valores enquanto o cursor a atravessa. */
+    const colunas = [...document.querySelectorAll("[data-coluna]")].filter(
+      (c) => c.getAttribute("data-coluna") !== st.id
+    );
+    let onde = colunas.length;
+    for (let i = 0; i < colunas.length; i++) {
+      const r = colunas[i].getBoundingClientRect();
+      if (ev.clientX < r.left + r.width / 2) {
+        onde = i;
+        break;
+      }
+    }
+    indiceRef.current = onde;
+    setIndice(onde);
+  }, []);
+
+  const soltar = useCallback(() => {
+    const st = ref.current;
+    const eraArraste = st.ativo;
+    const destino = indiceRef.current;
+    ref.current = { ativo: false, id: null, x0: 0, y0: 0, largura: 0, nome: "" };
+    indiceRef.current = null;
+    document.removeEventListener("pointermove", mover);
+    document.removeEventListener("pointerup", soltar);
+    setVoando(null);
+    setIndice(null);
+    if (eraArraste && destino !== null && st.id) aoSoltar(st.id, destino);
+  }, [mover, aoSoltar]);
+
+  const pegar = useCallback(
+    (ev, id, nome) => {
+      /* O cabeçalho tem o menu (⋯) e o campo de renomear dentro. Clicar
+         neles não pode virar arraste, senão a coluna não se edita mais. */
+      if (ev.button !== 0) return;
+      if (ev.target.closest("button, input, .lista-menu")) return;
+      const coluna = ev.currentTarget.closest("[data-coluna]");
+      ref.current = {
+        ativo: false,
+        id,
+        x0: ev.clientX,
+        y0: ev.clientY,
+        largura: coluna ? coluna.getBoundingClientRect().width : 260,
+        nome,
+      };
+      document.addEventListener("pointermove", mover);
+      document.addEventListener("pointerup", soltar);
+    },
+    [mover, soltar]
+  );
+
+  return { pegar, voando, indice, arrastando: !!voando };
+}
