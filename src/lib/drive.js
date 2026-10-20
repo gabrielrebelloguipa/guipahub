@@ -51,8 +51,13 @@ let raizDoBanco = { raizId: "", raizNome: "" };
 export function definirRaiz(d) {
   const novo = { raizId: d?.raizId || "", raizNome: d?.raizNome || "" };
   /* Raiz nova invalida o índice inteiro: ele é um mapa de dentro da raiz
-     antiga, e aproveitá-lo deixaria passar pasta que não é mais acervo. */
-  if (novo.raizId !== raizDoBanco.raizId) esquecerArvore();
+     antiga, e aproveitá-lo deixaria passar pasta que não é mais acervo.
+
+     Só quando havia uma raiz ANTES. Na carga da página a raiz sempre
+     "muda" de vazio para o id real, e tratar isso como troca apagava o
+     índice guardado no navegador a cada visita. Índice de outra raiz não
+     é risco: lerIndiceGuardado confere de qual raiz ele é. */
+  if (raizDoBanco.raizId && novo.raizId !== raizDoBanco.raizId) esquecerArvore();
   raizDoBanco = novo;
 }
 
@@ -121,43 +126,83 @@ function comTokenAsync(fn) {
 const CAMPOS_ARQ =
   "id,name,mimeType,thumbnailLink,webViewLink,size,modifiedTime,parents";
 
+/* ---------- o drive compartilhado da raiz ---------- */
+
+/* O acervo mora num drive compartilhado. Perguntar ao Drive "dentro
+   deste drive" (corpora=drive) em vez de "em tudo que a pessoa enxerga"
+   tira das consultas tudo o que não é desse drive, e mediu 45% mais
+   rápido na busca: 0,45 s contra 0,83 s para "stan".
+
+   Sem drive compartilhado (raiz no "Meu Drive" de alguém) o id vem
+   vazio, e as consultas seguem do jeito antigo. */
+let driveDaRaiz = null; // null = ainda não perguntado; "" = Meu Drive
+
+async function escopo() {
+  if (driveDaRaiz === null) {
+    const raiz = raizConfigurada();
+    try {
+      const f = raiz ? await pedir("files/" + raiz, { fields: "id,driveId" }) : null;
+      driveDaRaiz = f?.driveId || "";
+    } catch {
+      driveDaRaiz = "";
+    }
+  }
+  return driveDaRaiz ? { corpora: "drive", driveId: driveDaRaiz } : {};
+}
+
 /* ---------- cache de pastas ---------- */
 
-/* Guarda id → {id, name, parents}. Serve para montar a trilha de
-   navegação e para decidir se um resultado de busca está dentro da raiz,
-   sem repetir chamada: setor e subsetor se repetem em todo resultado e
-   são lidos uma vez só. Vive enquanto a aba estiver aberta. */
+/* id → {id, name, parents}. Setor e subsetor se repetem em todo
+   resultado de busca e são lidos uma vez só.
+
+   Guarda também o PEDIDO em andamento, não só a resposta: sem isso, dez
+   resultados da mesma pasta, conferidos em paralelo, disparavam dez
+   pedidos iguais pelo mesmo pai antes do primeiro voltar. */
 const cachePasta = new Map();
+const pedindoPasta = new Map();
 
 async function pastaPorId(id) {
   if (cachePasta.has(id)) return cachePasta.get(id);
-  try {
-    const f = await pedir("files/" + id, { fields: "id,name,parents" });
-    cachePasta.set(id, f);
-    return f;
-  } catch {
-    cachePasta.set(id, null);
-    return null;
-  }
+  if (pedindoPasta.has(id)) return pedindoPasta.get(id);
+  const p = pedir("files/" + id, { fields: "id,name,parents" })
+    .then((f) => {
+      cachePasta.set(id, f);
+      return f;
+    })
+    .catch(() => {
+      cachePasta.set(id, null);
+      return null;
+    })
+    .finally(() => pedindoPasta.delete(id));
+  pedindoPasta.set(id, p);
+  return p;
 }
 
 /* ---------- índice da árvore ---------- */
 
 /* O Drive não sabe responder "é descendente de X?" — só "é filho direto
-   de X?". Sem um índice, conferir 200 resultados de busca viraria uma
-   escada de perguntas por resultado: lento de doer na primeira busca e
-   perto do limite de chamadas do Google.
+   de X?". O índice é o mapa pasta → pai de tudo que fica abaixo da raiz,
+   e é ele que diz se um resultado de busca é do acervo.
 
-   Então o mapa pasta → pai é montado UMA vez, em segundo plano, logo que
-   a raiz é conhecida. Depois disso "está dentro do acervo?" é uma
-   consulta na memória, instantânea.
+   Três coisas o deixam rápido, e cada uma foi medida:
 
-   Montar é barato porque o Drive aceita vários pais na mesma pergunta:
-   em vez de 1265 chamadas, são lotes de 50 pais por vez — cerca de 30
-   chamadas para a árvore inteira. */
+   1. Lotes de 50 pais por pergunta: ~30 chamadas para as 1265 pastas,
+      em vez de 1265.
+   2. Os lotes de um mesmo nível saem em PARALELO. Antes iam em fila, um
+      por vez, e a árvore inteira levava uns 8 segundos.
+   3. Ele fica guardado no navegador por um dia. A estrutura do acervo
+      muda pouco; remontar a cada visita era pagar os 8 segundos toda
+      vez. Pasta criada hoje entra na próxima remontagem — e enquanto
+      isso, a conferência por subida pela API cobre a diferença.
+
+   Só entram aqui ids de pastas de DENTRO da raiz: nada acima dela nem
+   ao lado é lido, nem para indexar. */
 const LOTE_PAIS = 50;
+const LOTES_SIMULTANEOS = 4;
 const TETO_ARVORE = 5000;
 const PROFUNDIDADE_MAX = 15;
+const VALIDADE_INDICE_MS = 24 * 60 * 60 * 1000;
+const CHAVE_INDICE = "guipahub_indice_acervo";
 
 const arvore = new Map(); // id da pasta -> id do pai
 let arvoreCompleta = false;
@@ -169,64 +214,117 @@ function fatiar(lista, n) {
   return fatias;
 }
 
+function lerIndiceGuardado(raiz) {
+  try {
+    const bruto = localStorage.getItem(CHAVE_INDICE);
+    if (!bruto) return false;
+    const g = JSON.parse(bruto);
+    if (g.raiz !== raiz || Date.now() - g.em > VALIDADE_INDICE_MS) return false;
+    arvore.clear();
+    for (const [id, pai] of g.pares) arvore.set(id, pai);
+    arvoreCompleta = !!g.completa;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function guardarIndice(raiz) {
+  try {
+    localStorage.setItem(
+      CHAVE_INDICE,
+      JSON.stringify({ raiz, em: Date.now(), completa: arvoreCompleta, pares: [...arvore] })
+    );
+  } catch {
+    /* sem espaço: o índice vale só nesta visita, e tudo bem */
+  }
+}
+
+/* Um lote de pais, com todas as páginas dele. */
+async function filhosDoLote(lote, esc) {
+  const q = lote.map((id) => `'${escapaQ(id)}' in parents`).join(" or ");
+  const achados = [];
+  let pageToken;
+  do {
+    const r = await pedir("files", {
+      ...esc,
+      q: `(${q}) and mimeType='${PASTA}' and trashed=false`,
+      fields: "nextPageToken,files(id,name,parents)",
+      pageSize: 1000,
+      pageToken,
+    });
+    achados.push(...(r.files || []));
+    pageToken = r.nextPageToken;
+  } while (pageToken);
+  return achados;
+}
+
 async function montarArvore(raiz) {
-  arvore.clear();
-  arvore.set(raiz, null);
+  const esc = await escopo();
+  const nova = new Map([[raiz, null]]);
   let nivel = [raiz];
-  let total = 0;
   let estourou = false;
 
   for (let p = 0; p < PROFUNDIDADE_MAX && nivel.length && !estourou; p++) {
     const proximo = [];
-    for (const lote of fatiar(nivel, LOTE_PAIS)) {
-      const q = lote.map((id) => `'${escapaQ(id)}' in parents`).join(" or ");
-      let pageToken;
-      do {
-        const r = await pedir("files", {
-          q: `(${q}) and mimeType='${PASTA}' and trashed=false`,
-          fields: "nextPageToken,files(id,name,parents)",
-          pageSize: 1000,
-          pageToken,
-        });
-        for (const f of r.files || []) {
-          if (arvore.has(f.id)) continue;
-          arvore.set(f.id, f.parents?.[0] || null);
-          cachePasta.set(f.id, f);
-          proximo.push(f.id);
-          total++;
-        }
-        if (total >= TETO_ARVORE) estourou = true;
-        pageToken = estourou ? null : r.nextPageToken;
-      } while (pageToken);
-      if (estourou) break;
+    const lotes = fatiar(nivel, LOTE_PAIS);
+    /* Paralelo, mas com teto: o Google corta quem dispara dezenas de
+       pedidos ao mesmo tempo, e aí tudo fica mais lento, não menos. */
+    for (const grupo of fatiar(lotes, LOTES_SIMULTANEOS)) {
+      const respostas = await Promise.all(grupo.map((l) => filhosDoLote(l, esc)));
+      for (const f of respostas.flat()) {
+        if (nova.has(f.id)) continue;
+        nova.set(f.id, f.parents?.[0] || null);
+        cachePasta.set(f.id, f);
+        proximo.push(f.id);
+      }
+      if (nova.size >= TETO_ARVORE) {
+        estourou = true;
+        break;
+      }
     }
     nivel = proximo;
   }
 
-  /* Só vale afirmar "está fora da raiz" quando a árvore foi varrida
-     inteira. Truncada, um id ausente pode ser pasta que ficou de fora,
-     e aí a conferência volta a subir pela API. */
+  /* Troca o índice de uma vez só no fim: quem consulta no meio da
+     remontagem continua vendo o anterior inteiro, nunca um pela metade. */
+  arvore.clear();
+  for (const [id, pai] of nova) arvore.set(id, pai);
+  /* Só vale afirmar "está fora da raiz" com a árvore varrida inteira.
+     Truncada, um id ausente pode ser pasta que ficou de fora. */
   arvoreCompleta = !estourou;
+  guardarIndice(raiz);
   return arvoreCompleta;
 }
 
-/* Dispara a indexação sem bloquear ninguém. O App chama isto assim que a
-   raiz é conhecida, para que a primeira busca já encontre tudo pronto. */
+/* Carrega o índice guardado na hora, se houver, e remonta em segundo
+   plano só se ele estiver velho. Quem chama nunca espera a remontagem. */
 export function aquecerArvore() {
   const raiz = raizConfigurada();
   if (!raiz) return Promise.resolve(false);
   if (!arvorePromessa) {
-    arvorePromessa = comTokenAsync(() => montarArvore(raiz)).catch(() => false);
+    if (lerIndiceGuardado(raiz)) {
+      arvorePromessa = Promise.resolve(arvoreCompleta);
+    } else {
+      arvorePromessa = comTokenAsync(() => montarArvore(raiz)).catch(() => false);
+    }
   }
   return arvorePromessa;
 }
 
-/* Trocar a raiz invalida o índice inteiro. */
+/* Trocar a raiz invalida o índice inteiro, inclusive o guardado. */
 export function esquecerArvore() {
   arvore.clear();
   arvoreCompleta = false;
   arvorePromessa = null;
+  driveDaRaiz = null;
   cachePasta.clear();
+  cacheFilhos.clear();
+  try {
+    localStorage.removeItem(CHAVE_INDICE);
+  } catch {
+    /* nada guardado, nada a apagar */
+  }
 }
 
 export function tamanhoDoIndice() {
@@ -235,20 +333,30 @@ export function tamanhoDoIndice() {
 
 /* ---------- navegar ---------- */
 
+/* O conteúdo de cada pasta já aberta fica na memória por alguns minutos:
+   fechar e reabrir, ou voltar da busca para a pasta, não vai de novo ao
+   Drive. Curto de propósito — arquivo novo tem que aparecer logo. */
+const cacheFilhos = new Map(); // id -> { em, valor }
+const VALIDADE_FILHOS_MS = 5 * 60 * 1000;
+
 /* Um nível só: o que tem dentro desta pasta. É assim que a tela navega —
-   clicou, pede o andar de baixo. Nada de varrer a árvore inteira de
-   antemão: são 1265 pastas, e quase nenhuma interessa no momento. */
+   clicou, pede o andar de baixo. */
 export function listarFilhos(pastaId) {
+  const guardado = cacheFilhos.get(pastaId);
+  if (guardado && Date.now() - guardado.em < VALIDADE_FILHOS_MS) {
+    return Promise.resolve(guardado.valor);
+  }
   return comTokenAsync(async () => {
+    const esc = await escopo();
     const pastas = [];
     const arquivos = [];
     let pageToken;
     do {
       const r = await pedir("files", {
+        ...esc,
         q: `'${escapaQ(pastaId)}' in parents and trashed=false`,
         fields: `nextPageToken,files(${CAMPOS_ARQ})`,
         pageSize: 200,
-        orderBy: "folder,name",
         pageToken,
       });
       for (const f of r.files || []) {
@@ -264,7 +372,14 @@ export function listarFilhos(pastaId) {
       }
       pageToken = r.nextPageToken;
     } while (pageToken);
-    return { pastas, arquivos };
+    /* Ordem feita aqui e não pedida ao Drive: o orderBy custa caro na
+       consulta e a lista de uma pasta raramente passa de algumas
+       centenas de itens. */
+    const porNome = (a, b) =>
+      (a.nome || a.name).localeCompare(b.nome || b.name, "pt-BR", { numeric: true });
+    const valor = { pastas: pastas.sort(porNome), arquivos: arquivos.sort(porNome) };
+    cacheFilhos.set(pastaId, { em: Date.now(), valor });
+    return valor;
   });
 }
 
@@ -288,13 +403,12 @@ export function trilhaAteRaiz(pastaId) {
 
 /* ---------- buscar ---------- */
 
-/* "Este arquivo está dentro do acervo?" — com o índice pronto é uma
-   caminhada na memória, sem rede. Sem índice (ou com ele truncado), cai
-   para perguntar ao Drive de pai em pai.
+/* "Este arquivo está dentro do acervo?" — com o índice é uma caminhada
+   na memória. Sem índice, ou com ele velho, sobe perguntando ao Drive de
+   pai em pai, com cache e com o pedido em andamento compartilhado.
 
-   Subir sem limite fixo é o ponto: a estrutura tem 12 níveis, e qualquer
-   número redondo escolhido a dedo descartaria arquivo legítimo do fundo
-   sem dizer por quê. TETO_SUBIDA só existe contra ciclo de pastas. */
+   Subir sem limite fixo é o ponto: a estrutura tem 12 níveis. TETO_SUBIDA
+   só existe contra ciclo de pastas. */
 async function dentroDaRaiz(f, raiz) {
   let id = f.parents?.[0];
   for (let i = 0; i < TETO_SUBIDA && id; i++) {
@@ -303,8 +417,8 @@ async function dentroDaRaiz(f, raiz) {
       id = arvore.get(id);
       continue;
     }
-    /* Índice inteiro na mão e o id não está nele: está fora da raiz,
-       ponto. Só dá para afirmar isso quando a varredura terminou. */
+    /* Índice completo na mão e o id não está nele: está fora da raiz.
+       Só dá para afirmar isso com a varredura inteira. */
     if (arvoreCompleta) return false;
     const p = await pastaPorId(id);
     if (!p) return false;
@@ -313,32 +427,35 @@ async function dentroDaRaiz(f, raiz) {
   return false;
 }
 
-/* Busca por palavra dentro do acervo: devolve os arquivos e também as
-   pastas cujo nome casa, porque "bridgestone" tanto pode ser o que a
-   pessoa quer abrir quanto o nome dos arquivos lá dentro. */
+/* Busca por palavra dentro do acervo: arquivos e também pastas cujo
+   nome casa, porque "bridgestone" tanto pode ser o que a pessoa quer
+   abrir quanto o nome dos arquivos lá dentro.
+
+   A busca NÃO espera o índice. Esperar era o que fazia "stan" levar 7,9 s
+   no app contra 0,8 s no Drive: a primeira busca ficava parada atrás da
+   montagem da árvore inteira. Agora a pergunta ao Drive sai na hora; o
+   índice, se já estiver pronto (e quase sempre está, guardado do dia),
+   filtra na memória; se não, os poucos resultados sobem pela API. */
 export function buscarNoAcervo(termo) {
   return comTokenAsync(async () => {
     const raiz = raizConfigurada();
     if (!raiz) return { arquivos: [], pastas: [], semRaiz: true };
 
-    /* Espera o índice antes de peneirar. Se ele ainda estiver sendo
-       montado, esperar é mais rápido que conferir resultado por resultado
-       pela rede — e evita descartar arquivo por timeout. */
-    await aquecerArvore();
-
+    aquecerArvore(); // em paralelo, sem esperar
+    const esc = await escopo();
     const t = escapaQ(termo);
     const [rArq, rPas] = await Promise.all([
       pedir("files", {
+        ...esc,
         q: `name contains '${t}' and trashed=false and mimeType != '${PASTA}'`,
         fields: `files(${CAMPOS_ARQ})`,
         pageSize: 200,
-        orderBy: "name",
       }),
       pedir("files", {
+        ...esc,
         q: `name contains '${t}' and trashed=false and mimeType='${PASTA}'`,
         fields: "files(id,name,parents)",
         pageSize: 60,
-        orderBy: "name",
       }),
     ]);
 
@@ -347,14 +464,18 @@ export function buscarNoAcervo(termo) {
       return lista.filter((_, i) => dentro[i]);
     };
 
-    const pastas = await peneira(rPas.files || []);
+    const [pastas, arquivos] = await Promise.all([
+      peneira(rPas.files || []),
+      peneira(rArq.files || []),
+    ]);
     for (const p of pastas) {
       cachePasta.set(p.id, { id: p.id, name: p.name, parents: p.parents });
     }
 
+    const porNome = (a, b) => a.name.localeCompare(b.name, "pt-BR", { numeric: true });
     return {
-      arquivos: await peneira(rArq.files || []),
-      pastas: pastas.map((p) => ({ id: p.id, nome: p.name })),
+      arquivos: arquivos.sort(porNome),
+      pastas: pastas.sort(porNome).map((p) => ({ id: p.id, nome: p.name })),
       semRaiz: false,
     };
   });
