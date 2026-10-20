@@ -71,8 +71,8 @@ function Frase({ e, comTitulo }) {
 const ICONE = { criou: "＋", moveu: "→", editou: "✎", comentou: "❝", excluiu: "✕" };
 
 /* Linha da atividade: o que aconteceu com o cartão, sem caixa de texto.
-   Comentário aparece aqui só como "fulano comentou" — a conversa mora na
-   aba Comentários, onde dá para responder, editar e excluir. */
+   No histórico do quadro inteiro o comentário também vem por aqui, com o
+   texto embaixo; dentro do cartão ele vira balão (Comentario). */
 function Linha({ e, comTitulo }) {
   return (
     <li className={"hist-item hist-" + e.tipo}>
@@ -207,11 +207,13 @@ function Comentario({ e, meuEmail, souAdmin, aoMudar }) {
   );
 }
 
-/* ---------- painel do cartão: Comentários | Atividade ---------- */
+/* ---------- painel do cartão: comentários e atividade ---------- */
 
+/* Uma linha do tempo só: comentário em balão, e entre eles o que
+   aconteceu com o cartão (criou, moveu, editou) numa linha discreta. Lida
+   de cima para baixo, conta a história inteira sem trocar de aba. */
 export function PainelCartao({ quadroId, cartao, podeComentar, perfil }) {
   const { eu } = usePermissoes();
-  const [aba, setAba] = useState("comentarios");
   const [eventos, setEventos] = useState(null);
   const [erro, setErro] = useState("");
   const [texto, setTexto] = useState("");
@@ -254,102 +256,72 @@ export function PainelCartao({ quadroId, cartao, podeComentar, perfil }) {
     ler();
   }
 
-  /* Mais recente em cima nas duas abas: quem abre o cartão quer saber o
-     que aconteceu por último, não reler desde o começo. */
+  /* Mais recente em cima: quem abre o cartão quer saber o que aconteceu
+     por último, não reler desde o começo. */
   const todos = eventos ? [...eventos].reverse() : [];
-  const comentarios = todos.filter((e) => e.tipo === "comentou");
-  const atividade = todos.filter((e) => e.tipo !== "comentou");
+  const nComentarios = todos.filter((e) => e.tipo === "comentou").length;
 
   return (
     <div className="painel">
-      <div className="painel-abas" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={aba === "comentarios"}
-          className={"painel-aba" + (aba === "comentarios" ? " on" : "")}
-          onClick={() => setAba("comentarios")}
-        >
-          Comentários <span className="painel-n">{comentarios.length}</span>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={aba === "atividade"}
-          className={"painel-aba" + (aba === "atividade" ? " on" : "")}
-          onClick={() => setAba("atividade")}
-        >
-          Atividade <span className="painel-n">{atividade.length}</span>
-        </button>
+      <div className="tarefa-secao painel-titulo">
+        Comentários e atividade
+        {nComentarios > 0 && <span className="painel-n">{nComentarios}</span>}
       </div>
 
       {erro && <div className="banner" style={{ borderColor: "var(--danger)" }}>{erro}</div>}
 
-      {aba === "comentarios" ? (
-        <>
-          {podeComentar && (
-            <div className="coment-novo">
-              <Avatar email={perfil?.email} nome={perfil?.nome} />
-              <div className="coment-novo-caixa">
-                <textarea
-                  value={texto}
-                  placeholder="Escreva um comentário…"
-                  onChange={(e) => setTexto(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      enviar();
-                    }
-                  }}
-                />
-                <div className="coment-novo-pe">
-                  <span>Enter envia · Shift+Enter pula linha</span>
-                  <button
-                    className="btn sm primary"
-                    type="button"
-                    disabled={!texto.trim() || enviando}
-                    onClick={enviar}
-                  >
-                    {enviando ? "Enviando…" : "Comentar"}
-                  </button>
-                </div>
-              </div>
+      {podeComentar && (
+        <div className="coment-novo">
+          <Avatar email={perfil?.email} nome={perfil?.nome} />
+          <div className="coment-novo-caixa">
+            <textarea
+              value={texto}
+              placeholder="Escreva um comentário…"
+              onChange={(e) => setTexto(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  enviar();
+                }
+              }}
+            />
+            <div className="coment-novo-pe">
+              <span>Enter envia · Shift+Enter pula linha</span>
+              <button
+                className="btn sm primary"
+                type="button"
+                disabled={!texto.trim() || enviando}
+                onClick={enviar}
+              >
+                {enviando ? "Enviando…" : "Comentar"}
+              </button>
             </div>
-          )}
+          </div>
+        </div>
+      )}
 
-          {eventos === null ? (
-            <div className="empty">Lendo os comentários…</div>
-          ) : !comentarios.length ? (
-            <div className="painel-vazio">
-              Nenhum comentário ainda.
-              {podeComentar && " Escreva o primeiro aí em cima."}
-            </div>
-          ) : (
-            <ul className="coment-lista">
-              {comentarios.map((e) => (
-                <Comentario
-                  key={e.id + (e.editadoEm || "")}
-                  e={e}
-                  meuEmail={perfil?.email}
-                  souAdmin={!!eu?.admin}
-                  aoMudar={ler}
-                />
-              ))}
-            </ul>
-          )}
-        </>
-      ) : eventos === null ? (
-        <div className="empty">Lendo a atividade…</div>
-      ) : !atividade.length ? (
+      {eventos === null ? (
+        <div className="empty">Lendo…</div>
+      ) : !todos.length ? (
         <div className="painel-vazio">
-          Nada registrado ainda. Cartões criados antes do histórico existir
-          começam a contar a partir da próxima mudança.
+          Nada por aqui ainda.
+          {podeComentar && " Escreva o primeiro comentário aí em cima."}
         </div>
       ) : (
-        <ul className="hist-lista">
-          {atividade.map((e) => (
-            <Linha key={e.id} e={e} />
-          ))}
+        <ul className="coment-lista">
+          {todos.map((e) =>
+            e.tipo === "comentou" ? (
+              <Comentario
+                key={e.id + (e.editadoEm || "")}
+                e={e}
+                meuEmail={perfil?.email}
+                souAdmin={!!eu?.admin}
+                aoMudar={ler}
+              />
+            ) : (
+              <Linha key={e.id} e={e} />
+            )
+          )}
         </ul>
       )}
     </div>
