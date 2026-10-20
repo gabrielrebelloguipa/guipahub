@@ -1,3 +1,4 @@
+import { usePode } from "../lib/permissoes.js";
 import { useState } from "react";
 import { useEstado, alterar, uid } from "../lib/estado.js";
 import {
@@ -254,6 +255,18 @@ export default function Prompts({ busca }) {
   const [copiado, setCopiado] = useState("");
   const [bibliotecaAberta, setBibliotecaAberta] = useState(false);
   const [publicado, setPublicado] = useState("");
+  const podeFazer = usePode();
+
+  /* Publicar um titulo que ja esta na biblioteca e ATUALIZAR o que esta
+     la -- e para o banco isso e um UPDATE, que exige "editar", nao so
+     "publicar". Sem conferir aqui, o botao apareceria e o banco recusaria
+     com uma mensagem que nao explica o motivo. */
+  function podePublicar(p) {
+    const jaExiste = (compartilhado.biblioteca || []).some(
+      (b) => normaliza(b.titulo) === normaliza(p.titulo)
+    );
+    return jaExiste ? podeFazer("prompts", "editar") : podeFazer("prompts", "publicar");
+  }
 
   /* Publicar manda uma copia para o balcao comum. Republicar o mesmo
      prompt atualiza o que esta la em vez de criar um segundo igual. */
@@ -388,14 +401,16 @@ export default function Prompts({ busca }) {
                   <button className="btn sm" type="button" onClick={() => copiar(p)}>
                     {copiado === p.id ? "copiado ✓" : "Copiar"}
                   </button>
-                  <button
-                    className="btn sm ghost"
-                    type="button"
-                    title="Mandar uma copia para a biblioteca do time"
-                    onClick={() => publicar(p)}
-                  >
-                    {publicado === p.id ? "publicado" : "Publicar"}
-                  </button>
+                  {podePublicar(p) && (
+                    <button
+                      className="btn sm ghost"
+                      type="button"
+                      title="Mandar uma copia para a biblioteca do time"
+                      onClick={() => publicar(p)}
+                    >
+                      {publicado === p.id ? "publicado" : "Publicar"}
+                    </button>
+                  )}
                   <button
                     className="btn sm ghost"
                     type="button"

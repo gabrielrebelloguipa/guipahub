@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../lib/useAuth.js";
+import { pode } from "../lib/permissoes.js";
 import { pedirToken } from "../lib/auth.js";
 import {
   aquecerArvore,
@@ -90,7 +91,7 @@ function AvisoDeAcesso() {
 
 /* ---------- um arquivo ---------- */
 
-function Cartao({ f, aoAbrir, aoCopiar, aoBaixar }) {
+function Cartao({ f, aoAbrir, aoCopiar, aoBaixar, podeBaixar = true }) {
   const tem = ehImagem(f) || ehVideo(f);
   return (
     <div className="midia">
@@ -116,14 +117,19 @@ function Cartao({ f, aoAbrir, aoCopiar, aoBaixar }) {
         {f.name}
       </div>
       <div className="midia-acoes">
-        {ehImagem(f) && (
+        {/* Baixar e copiar sao a mesma permissao: os dois tiram o arquivo
+            do Drive e poem na maquina da pessoa. Ver e abrir no Drive
+            seguem liberados -- quem ve a imagem ja a tem na tela. */}
+        {podeBaixar && ehImagem(f) && (
           <button className="btn sm" type="button" onClick={() => aoCopiar(f)}>
             Copiar
           </button>
         )}
-        <button className="btn sm ghost" type="button" onClick={() => aoBaixar(f)}>
-          Baixar
-        </button>
+        {podeBaixar && (
+          <button className="btn sm ghost" type="button" onClick={() => aoBaixar(f)}>
+            Baixar
+          </button>
+        )}
         {f.webViewLink && (
           <a className="btn sm ghost" href={f.webViewLink} target="_blank" rel="noopener">
             Drive
@@ -367,7 +373,12 @@ export default function Imagens({ busca }) {
     }
   }, []);
 
-  const acoes = { aoAbrir: setAberto, aoCopiar: copiar, aoBaixar: baixar };
+  const acoes = {
+    aoAbrir: setAberto,
+    aoCopiar: copiar,
+    aoBaixar: baixar,
+    podeBaixar: pode("clientes", "baixar"),
+  };
 
   if (auth.expirou || auth.acessoDrive === false) return <AvisoDeAcesso />;
   if (auth.verificando) return <div className="empty">Conferindo o seu acesso ao Drive…</div>;
