@@ -27,6 +27,7 @@ export const ABAS = [
      permissao de quem ja a tinha. So o rotulo mudou. */
   { key: "clientes", label: "Imagens", ico: "▧" },
   { key: "prompts", label: "Prompts", ico: "✦" },
+  { key: "calculadora", label: "Calculadora", ico: "＄" },
 ];
 
 export const TODAS_AS_CHAVES = ABAS.map((a) => a.key);
@@ -47,6 +48,9 @@ export const AREAS = [
   { key: "marcas", label: "Marcas", acoes: ["ver", "criar", "editar", "excluir"] },
   { key: "clientes", label: "Imagens", acoes: ["ver", "baixar"] },
   { key: "prompts", label: "Prompts", acoes: ["ver", "publicar", "editar", "excluir"] },
+  /* Só "ver": a calculadora não grava nada no banco. A proposta fica no
+     navegador de quem monta, e exportar é baixar um arquivo. */
+  { key: "calculadora", label: "Calculadora", acoes: ["ver"] },
 ];
 
 export const ROTULO_ACAO = {
@@ -71,7 +75,7 @@ export const ACOES_SEM_TRANCA = { demandas: ["mover"] };
    banco manda; este aqui so aparece no piscar antes da resposta, e
    discordar dele faria a sidebar trocar de tamanho na frente da
    pessoa. Marcas e Prompts ficam de fora ate estarem prontas. */
-const ABAS_PADRAO_INICIAL = ["hoje", "demandas", "central", "clientes"];
+const ABAS_PADRAO_INICIAL = ["hoje", "demandas", "central", "clientes", "calculadora"];
 
 const PERMISSOES_PADRAO_INICIAL = {
   hoje: { ver: true },
@@ -80,6 +84,7 @@ const PERMISSOES_PADRAO_INICIAL = {
   marcas: { ver: false, criar: false, editar: false, excluir: false },
   clientes: { ver: true, baixar: true },
   prompts: { ver: false, publicar: false, editar: false, excluir: false },
+  calculadora: { ver: true },
 };
 
 const vazio = () => ({

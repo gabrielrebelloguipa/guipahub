@@ -62,9 +62,6 @@ function mudar(patch) {
 
 /* ---------- token do Google (fora do estado de tela) ---------- */
 
-/* Fica fora do estado observável: muda sozinho e não tem nada a ver com
-   o que é desenhado. Se entrasse lá, cada renovação redesenharia o app. */
-let providerToken = lerProviderToken();
 
 /* localStorage e nao sessionStorage. A escolha anterior era mais segura
    no papel -- o token morria junto com a aba -- e horrivel na pratica:
@@ -75,12 +72,48 @@ let providerToken = lerProviderToken();
 
    Guardado junto com o instante de validade, para saber se ainda serve
    sem ter que perguntar ao Google. */
+/* ⚠ O BUG QUE ISTO EVITA.
+
+   O Supabase guarda o token do Google dentro da sessão dele e o devolve
+   a cada recarga da página — sempre o MESMO, o da última ida ao Google.
+   Ele não renova esse token. A versão anterior regravava o token a cada
+   recarga com validade nova de 55 minutos: um token que o Google já
+   tinha matado ganhava vida nova no app, e a primeira chamada ao Drive
+   voltava "Request had invalid authentication credentials".
+
+   Por isso: a validade conta da PRIMEIRA vez que o token é visto, e um
+   token que venceu ou que o Drive recusou fica marcado como morto. O
+   Supabase pode devolvê-lo quantas vezes quiser — morto não volta. */
+const MORTO_KEY = "guipahub_token_morto";
+
+/* Só o fim do token, como impressão digital. Guardar o token inteiro de
+   um token morto seria guardar credencial sem motivo. */
+function digital(t) {
+  return String(t || "").slice(-24);
+}
+function marcarMorto(t) {
+  if (!t) return;
+  try {
+    localStorage.setItem(MORTO_KEY, digital(t));
+  } catch {
+    /* sem localStorage, a proteção vale só nesta aba */
+  }
+}
+function estaMorto(t) {
+  try {
+    return !!t && localStorage.getItem(MORTO_KEY) === digital(t);
+  } catch {
+    return false;
+  }
+}
+
 function lerProviderToken() {
   try {
     const bruto = localStorage.getItem(PROVIDER_TOKEN_KEY);
     if (!bruto) return "";
     const { t, exp } = JSON.parse(bruto);
-    if (!t || !exp || Date.now() >= exp) {
+    if (!t || !exp || Date.now() >= exp || estaMorto(t)) {
+      marcarMorto(t);
       localStorage.removeItem(PROVIDER_TOKEN_KEY);
       return "";
     }
@@ -90,19 +123,51 @@ function lerProviderToken() {
   }
 }
 
+/* Devolve true se o token foi aceito como bom. */
 function guardarProviderToken(t) {
+  if (t && estaMorto(t)) {
+    providerToken = "";
+    try {
+      localStorage.removeItem(PROVIDER_TOKEN_KEY);
+    } catch {
+      /* nada a limpar */
+    }
+    return false;
+  }
   providerToken = t || "";
   try {
-    if (t)
-      localStorage.setItem(
-        PROVIDER_TOKEN_KEY,
-        JSON.stringify({ t, exp: Date.now() + VIDA_TOKEN_MS })
-      );
-    else localStorage.removeItem(PROVIDER_TOKEN_KEY);
+    if (t) {
+      /* Mesmo token já guardado: mantém a validade de quando foi visto
+         pela primeira vez, não estica. */
+      let exp = Date.now() + VIDA_TOKEN_MS;
+      const g = JSON.parse(localStorage.getItem(PROVIDER_TOKEN_KEY) || "null");
+      if (g && g.t === t && g.exp) exp = g.exp;
+      localStorage.setItem(PROVIDER_TOKEN_KEY, JSON.stringify({ t, exp }));
+    } else {
+      localStorage.removeItem(PROVIDER_TOKEN_KEY);
+    }
   } catch {
     /* sem localStorage o token vale só enquanto a página estiver aberta */
   }
+  return !!t;
 }
+
+/* O Drive recusou o token (401). Vale mais que qualquer relógio nosso:
+   marca como morto e vai buscar um novo, sem perguntar nada. */
+export function tokenRecusado() {
+  marcarMorto(providerToken);
+  guardarProviderToken("");
+  mudar({ expirou: true });
+  renovarAcessoDrive();
+}
+
+/* Fica fora do estado observável: muda sozinho e não tem nada a ver com
+   o que é desenhado. Se entrasse lá, cada renovação redesenharia o app.
+
+   Lido AQUI, e não no topo: lerProviderToken usa MORTO_KEY, que é const
+   e só existe a partir da linha em que é declarada. Ler antes disso
+   derrubava o módulo inteiro na carga. */
+let providerToken = lerProviderToken();
 
 export function pegarToken() {
   return providerToken;
@@ -302,10 +367,10 @@ function aplicarSessao(sessao) {
     return;
   }
 
-  if (sessao.provider_token) {
-    guardarProviderToken(sessao.provider_token);
-    /* Deu certo: destranca a renovacao automatica para a proxima vez que
-       o token vencer, daqui a uma hora. */
+  /* So destranca a renovacao automatica quando chegou token BOM. Se o
+     Supabase devolveu o token velho de sempre (morto), o trinco fica
+     como esta -- senao uma volta do Google sem token novo viraria laco. */
+  if (sessao.provider_token && guardarProviderToken(sessao.provider_token)) {
     try {
       sessionStorage.removeItem(RENOVOU_KEY);
     } catch {

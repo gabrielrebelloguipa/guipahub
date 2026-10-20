@@ -841,3 +841,76 @@
     border: 1px solid var(--border); border-radius: 8px;
     padding: 6px 9px; font: inherit; font-size: 0.84rem;
   }
+
+  /* ---------- calculadora comercial ---------- */
+
+  /* A folha é larga como a planilha (13 colunas). Rola dentro de si em
+     vez de empurrar a página para o lado. */
+  .calc-rola { overflow-x: auto; border-radius: var(--radius); }
+
+  /* A folha tem fundo claro fixo, nos dois temas: ela é o que vira
+     imagem e vai para o cliente, e proposta comercial não sai em tela
+     escura. */
+  .calc-folha {
+    min-width: 1080px; background: #ffffff; color: #1d1d1b;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 22px 24px 18px;
+  }
+  .calc-topo {
+    display: grid; grid-template-columns: auto 1fr 1fr; gap: 10px 28px;
+    align-items: start; margin-bottom: 18px;
+  }
+  .calc-marca { font-size: 1.7rem; font-weight: 800; color: #f76e00; letter-spacing: -.02em; line-height: 1; }
+  .calc-cab { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .calc-cab-item { display: flex; align-items: baseline; gap: 6px; font-size: 0.8rem; font-weight: 700; color: #1d1d1b; }
+  .calc-cab-item > span:first-child { white-space: nowrap; }
+  .calc-cab-item .calc-in.txt { flex: 1 1 auto; font-weight: 500; }
+  .calc-cab-item .calc-val { font-weight: 500; }
+
+  .calc-tab { border-collapse: collapse; width: 100%; font-size: 0.78rem; }
+  .calc-tab th {
+    background: #f76e00; color: #ffffff; font-weight: 700; font-size: 0.7rem;
+    padding: 8px 6px; text-align: center; line-height: 1.2;
+  }
+  .calc-tab td {
+    padding: 5px 6px; border-bottom: 1px solid #ececea; text-align: right;
+    white-space: nowrap; color: #1d1d1b; vertical-align: middle;
+  }
+  .calc-tab td:first-child { text-align: left; }
+  .calc-tab tr.slot2 td { background: #fbfaf8; }
+  .calc-tab tfoot td { font-weight: 800; background: #f2f2f0; border-bottom: 0; }
+  .calc-tab tfoot td:first-child { text-transform: uppercase; letter-spacing: .04em; }
+  .calc-conta { font-variant-numeric: tabular-nums; }
+  .calc-conta.forte { font-weight: 700; }
+  .calc-deriv { color: #8a8a85; }
+  .calc-val.dim { color: #8a8a85; }
+  .calc-ativos { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .calc-acoes { text-align: center !important; }
+  .calc-acoes .btn { padding: 2px 7px; }
+
+  /* Campo que não parece campo: a folha deve ler como documento, e a
+     borda só aparece quando o cursor passa ou o campo está em uso. */
+  .calc-in {
+    font: inherit; font-variant-numeric: tabular-nums; color: #1d1d1b;
+    background: transparent; border: 1px solid transparent; border-radius: 5px;
+    padding: 3px 5px; width: 92px; text-align: right;
+  }
+  .calc-in.largo { width: 118px; }
+  .calc-in.txt { width: 100%; min-width: 60px; text-align: left; }
+  .calc-tab td:first-child .calc-in.txt { width: 64px; }
+  select.calc-in { width: 96px; text-align: left; cursor: pointer; }
+  .calc-in:hover { border-color: #dddcd7; background: #fffaf5; }
+  .calc-in:focus { outline: none; border-color: #f76e00; background: #ffffff; }
+  .calc-ativos .calc-in { width: 44px; }
+
+  .calc-notas {
+    list-style: none; margin: 16px 0 0; padding: 0;
+    font-size: 0.7rem; color: #4a4a46; line-height: 1.6;
+  }
+  .calc-notas li:first-child { font-weight: 700; color: #1d1d1b; }
+
+  .calc-premissas { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px 18px; }
+  .calc-premissa { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 0.82rem; color: var(--text); }
+  .calc-premissa .calc-in {
+    color: var(--text); border-color: var(--border); background: var(--bg); width: 100px;
+  }

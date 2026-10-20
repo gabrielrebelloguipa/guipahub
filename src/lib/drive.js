@@ -23,6 +23,7 @@ import {
   comToken,
   marcarVerificando,
   marcarAcessoDrive,
+  tokenRecusado,
 } from "./auth.js";
 
 const API = "https://www.googleapis.com/drive/v3/";
@@ -93,6 +94,14 @@ async function pedir(recurso, params) {
        Drive não foi autorizado, ou a pessoa não tem permissão ali.
        Tratar os dois como "erro" mandava a pessoa relogar à toa. */
     const j = await r.json().catch(() => ({}));
+    if (r.status === 401) {
+      /* Token vencido ou morto. Em vez de mostrar a mensagem crua do
+         Google, renova e explica o que está acontecendo. */
+      tokenRecusado();
+      const e = new Error("Sua sessão do Google venceu. Renovando o acesso — a página volta em instantes.");
+      e.status = 401;
+      throw e;
+    }
     const e = new Error(j?.error?.message || "HTTP " + r.status);
     e.status = r.status;
     throw e;

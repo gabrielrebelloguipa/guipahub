@@ -9,6 +9,7 @@ import Marcas from "./abas/Marcas.jsx";
 import Imagens from "./abas/Clientes.jsx";
 import Prompts from "./abas/Prompts.jsx";
 import Configuracoes from "./abas/Configuracoes.jsx";
+import Calculadora from "./abas/Calculadora.jsx";
 import { useAuth } from "./lib/useAuth.js";
 import { restaurarSessao, tokenValido, renovarAcessoDrive } from "./lib/auth.js";
 import { verificarAcesso } from "./lib/drive.js";
@@ -30,6 +31,7 @@ const TITULOS = {
   clientes: ["Imagens", "O acervo de imagens dos clientes, direto do Drive"],
   prompts: ["Prompts", "Os prompts que você reusa, prontos pra copiar"],
   config: ["Configurações", "Permissões do time e de onde vem o acervo"],
+  calculadora: ["Calculadora comercial", "Monte a proposta e exporte em Excel ou imagem"],
 };
 
 export default function App() {
@@ -113,6 +115,7 @@ export default function App() {
             {secao === "clientes" && <Imagens busca={busca} />}
             {secao === "prompts" && <Prompts busca={busca} />}
             {secao === "config" && <Configuracoes />}
+            {secao === "calculadora" && <Calculadora />}
           </div>
         </div>
       </div>
