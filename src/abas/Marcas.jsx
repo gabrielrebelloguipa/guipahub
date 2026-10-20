@@ -1,5 +1,5 @@
 import { usePode, pode } from "../lib/permissoes.js";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   useCompartilhado,
   salvarMarca,
@@ -7,6 +7,9 @@ import {
   validarMarca,
   nichosConhecidos,
   quadroDaMarca,
+  definirResponsavel,
+  pessoas,
+  nomeDe,
 } from "../lib/compartilhado.js";
 import { useAuth } from "../lib/useAuth.js";
 import Modal, { Confirmar } from "../componentes/Modal.jsx";
@@ -15,8 +18,43 @@ import AvisoAlcance from "../componentes/AvisoAlcance.jsx";
 import { fmtData } from "../lib/constantes.js";
 
 const VAZIA = {
-  nome: "", nicho: "", site: "", resumo: "", descricao: "", logo: "",
+  nome: "", nicho: "", site: "", resumo: "", descricao: "", logo: "", responsavel: "",
 };
+
+/* A lista do time chega uma vez e e dividida por todos os
+   componentes desta aba. */
+function useTime() {
+  const [time, setTime] = useState([]);
+  useEffect(() => {
+    pessoas().then(setTime);
+  }, []);
+  return time;
+}
+
+/* Campo de responsavel: escolhe da lista de quem ja entrou, mas aceita
+   digitar o e-mail de quem ainda nao entrou -- a carteira de alguem
+   pode ser montada antes do primeiro login dessa pessoa. */
+function CampoResponsavel({ id, valor, aoMudar, time }) {
+  return (
+    <>
+      <input
+        id={id}
+        type="email"
+        list={id + "-time"}
+        value={valor}
+        placeholder="Quem do comercial cuida desta conta"
+        onChange={(e) => aoMudar(e.target.value)}
+      />
+      <datalist id={id + "-time"}>
+        {time.map((p) => (
+          <option key={p.email} value={p.email}>
+            {p.nome || p.email}
+          </option>
+        ))}
+      </datalist>
+    </>
+  );
+}
 
 /* Logo vira data URL reduzida: ela é guardada junto do resto, e imagem
    grande estoura o armazenamento. SVG passa direto — já é leve, e
@@ -59,6 +97,7 @@ function FormMarca({ inicial, aoFechar }) {
 
   const faltando = validarMarca(m);
   const nichos = nichosConhecidos(compartilhado);
+  const time = useTime();
 
   /* O erro só aparece depois da primeira tentativa de salvar. Marcar tudo
      de vermelho num formulário que a pessoa acabou de abrir é hostil. */
@@ -149,6 +188,16 @@ function FormMarca({ inicial, aoFechar }) {
         )}
       </div>
 
+      <div className="field">
+        <label htmlFor="mc-responsavel">Responsável pela conta</label>
+        <CampoResponsavel
+          id="mc-responsavel"
+          valor={m.responsavel || ""}
+          aoMudar={(v) => setM({ ...m, responsavel: v })}
+          time={time}
+        />
+      </div>
+
       {campo("site", "Site", true,
         <input
           id="mc-site"
@@ -229,6 +278,23 @@ function Detalhe({ marca, aoFechar, aoEditar, aoExcluir }) {
   const compartilhado = useCompartilhado();
   const podeFazer = usePode();
   const temQuadro = !!quadroDaMarca(compartilhado, marca.id);
+  const time = useTime();
+  const [resp, setResp] = useState(marca.responsavel || "");
+  const [salvandoResp, setSalvandoResp] = useState(false);
+  const [erroResp, setErroResp] = useState("");
+
+  async function gravarResp() {
+    if (resp.trim().toLowerCase() === (marca.responsavel || "")) return;
+    if (resp.trim() && !/@guipabrasil\.com$/i.test(resp.trim())) {
+      setErroResp("Use um e-mail @guipabrasil.com.");
+      return;
+    }
+    setSalvandoResp(true);
+    setErroResp("");
+    const r = await definirResponsavel(marca.id, resp);
+    setSalvandoResp(false);
+    if (!r.ok) setErroResp(r.erro);
+  }
 
   return (
     <Modal
@@ -269,6 +335,34 @@ function Detalhe({ marca, aoFechar, aoEditar, aoExcluir }) {
       </div>
 
       <div className="kv">
+        <div className="k">Responsável</div>
+        <div className="v">
+          {podeFazer("marcas", "editar") ? (
+            <div className="resp-rapido">
+              <CampoResponsavel
+                id="dt-responsavel"
+                valor={resp}
+                aoMudar={setResp}
+                time={time}
+              />
+              <button
+                className="btn sm"
+                type="button"
+                disabled={salvandoResp || resp.trim().toLowerCase() === (marca.responsavel || "")}
+                onClick={gravarResp}
+              >
+                {salvandoResp ? "salvando…" : "Salvar"}
+              </button>
+            </div>
+          ) : marca.responsavel ? (
+            nomeDe(marca.responsavel, time)
+          ) : (
+            <span className="sub">ninguém ainda</span>
+          )}
+          {erroResp && <div className="msg-erro">{erroResp}</div>}
+        </div>
+      </div>
+      <div className="kv">
         <div className="k">Site</div>
         <div className="v">
           <a href={marca.site} target="_blank" rel="noopener">
@@ -283,14 +377,14 @@ function Detalhe({ marca, aoFechar, aoEditar, aoExcluir }) {
       <div className="kv">
         <div className="k">Quadro</div>
         <div className="v">
-          {temQuadro ? "tem kanban próprio" : "ainda sem kanban"}
+          {temQuadro ? "tem kanban próprio" : "o quadro aparece em instantes"}
         </div>
       </div>
       <div className="kv">
         <div className="k">Cadastrada</div>
         <div className="v">
           {fmtData(marca.criadoEm)}
-          {marca.criadoPor ? ` · por ${marca.criadoPor}` : ""}
+          {marca.criadoPor ? ` · por ${nomeDe(marca.criadoPor, time)}` : ""}
         </div>
       </div>
 
@@ -309,8 +403,21 @@ export default function Marcas({ busca }) {
   const [aberta, setAberta] = useState(null);
   const [excluindo, setExcluindo] = useState(null);
   const [filtroNicho, setFiltroNicho] = useState("");
+  const [carteira, setCarteira] = useState("");
+  const auth = useAuth();
+  const time = useTime();
+  const meuEmail = (auth.perfil?.email || "").toLowerCase();
+
+  /* "minha" e "ninguem" sao atalhos; qualquer outro valor e o e-mail de
+     alguem do time. */
+  const naCarteira = (m) =>
+    !carteira ? true
+      : carteira === "minha" ? (m.responsavel || "") === meuEmail
+      : carteira === "ninguem" ? !m.responsavel
+      : (m.responsavel || "") === carteira;
 
   const marcas = (compartilhado.marcas || [])
+    .filter(naCarteira)
     .filter((m) => (filtroNicho ? m.nicho === filtroNicho : true))
     .filter((m) =>
       busca
@@ -320,6 +427,11 @@ export default function Marcas({ busca }) {
             .includes(busca.toLowerCase())
         : true
     );
+
+  const responsaveisEmUso = [
+    ...new Set((compartilhado.marcas || []).map((m) => m.responsavel).filter(Boolean)),
+  ].sort((a, b) => nomeDe(a, time).localeCompare(nomeDe(b, time), "pt-BR"));
+  const semResponsavel = (compartilhado.marcas || []).filter((m) => !m.responsavel).length;
 
   const nichosEmUso = [...new Set((compartilhado.marcas || []).map((m) => m.nicho))]
     .filter(Boolean)
@@ -333,6 +445,21 @@ export default function Marcas({ busca }) {
       </AvisoAlcance>
 
       <div className="chips">
+        <select
+          className="filtro-carteira"
+          value={carteira}
+          onChange={(e) => setCarteira(e.target.value)}
+          aria-label="Filtrar por carteira"
+        >
+          <option value="">Todas as carteiras</option>
+          <option value="minha">Minha carteira</option>
+          <option value="ninguem">Sem responsável ({semResponsavel})</option>
+          {responsaveisEmUso.map((e) => (
+            <option key={e} value={e}>
+              {nomeDe(e, time)}
+            </option>
+          ))}
+        </select>
         <button
           className={"chip" + (!filtroNicho ? " on" : "")}
           type="button"
@@ -387,6 +514,9 @@ export default function Marcas({ busca }) {
                 </div>
               </div>
               <div className="marca-resumo">{m.resumo}</div>
+              <div className="marca-resp">
+                {m.responsavel ? "Conta com " + nomeDe(m.responsavel, time) : "Sem responsável"}
+              </div>
             </button>
           ))}
         </div>

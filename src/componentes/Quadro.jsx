@@ -2,6 +2,7 @@ import { useState } from "react";
 import { PRIORIDADES, LISTA_CORES, hojeChave, fmtData, diasAte } from "../lib/constantes.js";
 import Modal, { Confirmar } from "./Modal.jsx";
 import { useArrastar, useArrastarColuna } from "../lib/useArrastar.js";
+import { HistoricoCartao } from "./Historico.jsx";
 import CartaoEmVoo from "./CartaoEmVoo.jsx";
 
 /* O quadro, sem saber de onde vêm os dados.
@@ -29,7 +30,7 @@ function TagPrazo({ prazo, concluida }) {
    a tela não oferecer botão que sempre dá erro. */
 export const TUDO = { criar: true, editar: true, mover: true, excluir: true, colunas: true };
 
-function CartaoModal({ tarefa, listas, api, aoFechar, pode = TUDO }) {
+function CartaoModal({ tarefa, listas, api, aoFechar, pode = TUDO, historico }) {
   const [d, setD] = useState(tarefa);
   const [excluindo, setExcluindo] = useState(false);
 
@@ -136,8 +137,22 @@ function CartaoModal({ tarefa, listas, api, aoFechar, pode = TUDO }) {
         </div>
         <div className="kv">
           <div className="k">Criada em</div>
-          <div className="v">{fmtData(d.criadoEm)}</div>
+          <div className="v">
+            {fmtData(d.criadoEm)}
+            {historico && d.criadoPor ? " por " + historico.nome(d.criadoPor) : ""}
+          </div>
         </div>
+
+        {/* Só nos quadros de marca: o pessoal é de uma pessoa só, e um
+            histórico de "você fez, você fez, você fez" não diria nada. */}
+        {historico && (
+          <HistoricoCartao
+            quadroId={historico.quadroId}
+            cartao={d}
+            podeComentar={historico.podeComentar}
+            perfil={historico.perfil}
+          />
+        )}
       </Modal>
 
       {excluindo && (
@@ -210,7 +225,7 @@ function MenuLista({ lista, listas, api, aoFechar }) {
   );
 }
 
-function Coluna({ lista, listas, tarefas, alvo, pegar, pegarColuna, api, aoAbrir, pode = TUDO }) {
+function Coluna({ lista, listas, tarefas, alvo, pegar, pegarColuna, api, aoAbrir, pode = TUDO, nome }) {
   const [menuAberto, setMenuAberto] = useState(false);
   const [editandoNome, setEditandoNome] = useState(false);
   const [novoCartao, setNovoCartao] = useState(null);
@@ -295,6 +310,11 @@ function Coluna({ lista, listas, tarefas, alvo, pegar, pegarColuna, api, aoAbrir
                   <span className="tag">{d.prioridade}</span>
                 )}
                 {d.notas && <span>≡</span>}
+                {nome && d.criadoPor && (
+                  <span className="cartao-autor" title={"Criado por " + nome(d.criadoPor)}>
+                    {nome(d.criadoPor)}
+                  </span>
+                )}
               </div>
             </button>
           </div>
@@ -339,7 +359,7 @@ function Coluna({ lista, listas, tarefas, alvo, pegar, pegarColuna, api, aoAbrir
   );
 }
 
-export default function Quadro({ listas, demandas, api, busca, pode = TUDO }) {
+export default function Quadro({ listas, demandas, api, busca, pode = TUDO, historico }) {
   const [aberta, setAberta] = useState(null);
   const { pegar, voando, alvo } = useArrastar({ aoSoltar: api.moverTarefa });
   const col = useArrastarColuna({ aoSoltar: api.reordenarLista });
@@ -384,6 +404,7 @@ export default function Quadro({ listas, demandas, api, busca, pode = TUDO }) {
                 pegar={pegar}
                 pegarColuna={col.pegar}
                 pode={pode}
+                nome={historico?.nome}
                 api={api}
                 aoAbrir={setAberta}
               />
@@ -410,6 +431,7 @@ export default function Quadro({ listas, demandas, api, busca, pode = TUDO }) {
       )}
       {aberta && (
         <CartaoModal
+          historico={historico}
           pode={pode}
           tarefa={aberta}
           listas={listas}

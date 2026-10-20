@@ -748,3 +748,96 @@
   .pessoa-nome { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pessoa-estado { margin-left: auto; color: var(--muted); font-size: 0.78rem; white-space: nowrap; }
   .pessoa-corpo { padding: 12px 14px 14px; border-top: 1px solid var(--border); background: var(--bg); }
+
+  /* ---------- seletor de marca com busca ---------- */
+
+  .escolhe-marca { position: relative; min-width: 240px; flex: 0 1 320px; }
+  .escolhe-marca input {
+    width: 100%; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 7px 10px; font-size: 0.84rem; font-family: inherit;
+  }
+  .escolhe-marca input:focus { outline: none; border-color: var(--accent); }
+  .escolhe-marca input::placeholder { color: var(--text); opacity: .55; }
+  .em-lista {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 40;
+    list-style: none; margin: 0; padding: 4px; max-height: 320px; overflow-y: auto;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: var(--menu-shadow);
+  }
+  .em-item {
+    display: flex; flex-direction: column; gap: 1px;
+    padding: 7px 10px; border-radius: 7px; cursor: pointer;
+  }
+  .em-item.foco { background: var(--surface-2); }
+  .em-item.atual .em-nome { color: var(--accent); }
+  .em-nome { font-size: 0.86rem; font-weight: 600; color: var(--text); }
+  .em-meta { font-size: 0.74rem; color: var(--muted); }
+  .em-vazio { padding: 8px 10px; font-size: 0.8rem; color: var(--muted); }
+
+  /* ---------- topo do quadro de marca ---------- */
+
+  .quadro-topo {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    margin: 4px 0 12px;
+  }
+  .qt-marca { min-width: 0; flex: 1 1 auto; }
+  .qt-nome { font-size: 1.05rem; font-weight: 700; color: var(--text); }
+  .qt-meta { font-size: 0.82rem; color: var(--muted); }
+  .qt-meta b { color: var(--text); }
+  .qt-sem { color: var(--warn); }
+
+  .cartao-autor {
+    margin-left: auto; font-size: 0.68rem; color: var(--muted);
+    max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* ---------- histórico ---------- */
+
+  .hist { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .hist-titulo {
+    font-size: 0.72rem; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 10px;
+  }
+  .hist-novo { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .hist-novo textarea {
+    min-height: 64px; resize: vertical; width: 100%;
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 0.86rem;
+  }
+  .hist-novo textarea:focus { outline: none; border-color: var(--accent); }
+  .hist-novo .btn { align-self: flex-end; }
+  .hist-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+  .hist-item { display: flex; gap: 10px; padding: 7px 0; }
+  .hist-ico {
+    flex: none; width: 22px; height: 22px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.72rem; color: var(--muted); background: var(--surface-2);
+  }
+  .hist-moveu .hist-ico { color: var(--accent); }
+  .hist-comentou .hist-ico { color: var(--text); }
+  .hist-excluiu .hist-ico { color: var(--danger); }
+  .hist-corpo { min-width: 0; flex: 1 1 auto; }
+  .hist-frase { font-size: 0.84rem; color: var(--text-dim, var(--text)); line-height: 1.4; }
+  .hist-frase b { color: var(--text); font-weight: 600; }
+  .hist-frase i { color: var(--text); }
+  .hist-comentario {
+    margin-top: 4px; padding: 8px 10px; border-radius: 8px;
+    background: var(--surface-2); color: var(--text);
+    font-size: 0.86rem; white-space: pre-wrap; word-break: break-word;
+  }
+  .hist-quando { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+
+  /* ---------- carteira nas marcas ---------- */
+
+  .filtro-carteira {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 0.8rem;
+  }
+  .marca-resp { margin-top: 8px; font-size: 0.74rem; color: var(--muted); }
+  .resp-rapido { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .resp-rapido input {
+    flex: 1 1 220px; min-width: 0; background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px 9px; font: inherit; font-size: 0.84rem;
+  }

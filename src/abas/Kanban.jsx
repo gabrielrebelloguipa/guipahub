@@ -1,15 +1,19 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useEstado, alterar as alterarPessoal, pegarEstado, uid } from "../lib/estado.js";
 import {
   useCompartilhado,
   quadroDaMarca,
   criarQuadro,
   apiQuadroEmpresa,
+  pessoas,
+  nomeDe,
 } from "../lib/compartilhado.js";
 import { useAuth } from "../lib/useAuth.js";
 import { usePode } from "../lib/permissoes.js";
 import Quadro, { criarApi } from "../componentes/Quadro.jsx";
 import AvisoAlcance from "../componentes/AvisoAlcance.jsx";
+import EscolheMarca from "../componentes/EscolheMarca.jsx";
+import { HistoricoQuadro } from "../componentes/Historico.jsx";
 
 export default function Kanban({ busca }) {
   const estado = useEstado();
@@ -57,6 +61,17 @@ export default function Kanban({ busca }) {
     [quadro?.id]
   );
 
+  /* Nomes do time, para mostrar "Ana" em vez de "ana.souza@guipabrasil.com"
+     no responsável e em quem criou cada cartão. */
+  const [time, setTime] = useState([]);
+  useEffect(() => {
+    pessoas().then(setTime);
+  }, []);
+  const nome = (email) => nomeDe(email, time);
+
+  const [verHistorico, setVerHistorico] = useState(false);
+  useEffect(() => setVerHistorico(false), [quadro?.id]);
+
   return (
     <>
       <div className="chips" style={{ alignItems: "center" }}>
@@ -79,26 +94,12 @@ export default function Kanban({ busca }) {
 
         {modo === "empresas" && (
           <>
-            <select
-              value={marcaId}
-              onChange={(e) => alterarPessoal({ kanbanMarcaId: e.target.value })}
-              style={{
-                background: "var(--bg)", color: "var(--text)",
-                border: "1px solid var(--border)", borderRadius: 8,
-                padding: "7px 10px", fontSize: "0.84rem", fontFamily: "inherit",
-              }}
-            >
-              <option value="">— escolha a marca —</option>
-              {marcas.map((m) => {
-                const tem = !!quadroDaMarca(compartilhado, m.id);
-                return (
-                  <option key={m.id} value={m.id}>
-                    {m.nome}
-                    {tem ? "" : "  (sem quadro)"}
-                  </option>
-                );
-              })}
-            </select>
+            <EscolheMarca
+              marcas={marcas}
+              valor={marcaId}
+              aoEscolher={(id) => alterarPessoal({ kanbanMarcaId: id })}
+              nomeResponsavel={nome}
+            />
 
             {marca && !quadro && podeQuadro.colunas && (
               <button
@@ -141,17 +142,53 @@ export default function Kanban({ busca }) {
         </div>
       ) : (
         <>
+          <div className="quadro-topo">
+            <div className="qt-marca">
+              <div className="qt-nome">{marca.nome}</div>
+              <div className="qt-meta">
+                {marca.nicho}
+                {" · "}
+                {marca.responsavel ? (
+                  <>Conta com <b>{nome(marca.responsavel)}</b></>
+                ) : (
+                  <span className="qt-sem">sem responsável — defina na aba Marcas</span>
+                )}
+              </div>
+            </div>
+            <button
+              className={"btn sm" + (verHistorico ? " primary" : " ghost")}
+              type="button"
+              onClick={() => setVerHistorico((v) => !v)}
+            >
+              {verHistorico ? "Voltar ao quadro" : "Histórico do quadro"}
+            </button>
+          </div>
+
           <AvisoAlcance>
-            <b>Quadro de {marca.nome}.</b> É compartilhado: o que você mexer
-            aqui vale para o time.
+            <b>Quadro compartilhado.</b> Tudo o que acontece aqui fica
+            registrado com o nome de quem fez: quem criou cada cartão, quem
+            moveu de uma coluna para outra e quem comentou.
           </AvisoAlcance>
-          <Quadro
-            listas={quadro.listas}
-            demandas={quadro.demandas}
-            api={apiEmpresa}
-            busca={busca}
-            pode={podeQuadro}
-          />
+
+          {verHistorico ? (
+            <div className="card">
+              <HistoricoQuadro quadroId={quadro.id} />
+            </div>
+          ) : (
+            <Quadro
+              listas={quadro.listas}
+              demandas={quadro.demandas}
+              api={apiEmpresa}
+              busca={busca}
+              pode={podeQuadro}
+              historico={{
+                quadroId: quadro.id,
+                perfil: auth.perfil,
+                podeComentar: podeFazer("demandas", "comentar"),
+                nome,
+              }}
+            />
+          )}
         </>
       )}
     </>

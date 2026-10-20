@@ -17,11 +17,33 @@ const CHAVE = "guipahub_v1";
    `status` de cada cartão guarda o id da coluna em que ele está. */
 const LISTAS_PADRAO = [
   { id: "l_pend", nome: "Pendentes", cor: "#c78b2b", concluida: false },
-  { id: "l_faz", nome: "Fazendo", cor: "#4f8fdb", concluida: false },
-  { id: "l_agu", nome: "Aguardando resposta", cor: "#8a6fc4", concluida: false },
-  { id: "l_hold", nome: "On Hold", cor: "#8b8d85", concluida: false },
-  { id: "l_fim", nome: "Finalizadas", cor: "#5fae5a", concluida: true },
+  { id: "l_faz", nome: "Em andamento", cor: "#4f8fdb", concluida: false },
+  { id: "l_agu", nome: "Em validação", cor: "#8a6fc4", concluida: false },
+  { id: "l_hold", nome: "On hold", cor: "#8b8d85", concluida: false },
+  { id: "l_fim", nome: "Concluído", cor: "#5fae5a", concluida: true },
 ];
+
+/* Nomes antigos das colunas padrão. Quem já usava o app tem as colunas
+   gravadas no próprio navegador, então trocar o padrão acima só valeria
+   para quem chegasse agora. Renomeia na carga — mas só a coluna que
+   ainda tem o id E o nome antigos: se a pessoa já tinha renomeado por
+   conta própria, o nome dela fica. */
+const NOMES_ANTIGOS = {
+  l_faz: "Fazendo",
+  l_agu: "Aguardando resposta",
+  l_hold: "On Hold",
+  l_fim: "Finalizadas",
+};
+function atualizarNomesDeColuna(listas) {
+  if (!Array.isArray(listas)) return listas;
+  return listas.map((L) => {
+    if (NOMES_ANTIGOS[L.id] && L.nome === NOMES_ANTIGOS[L.id]) {
+      const novo = LISTAS_PADRAO.find((x) => x.id === L.id);
+      return novo ? { ...L, nome: novo.nome } : L;
+    }
+    return L;
+  });
+}
 
 const ATALHOS_PADRAO = [
   { id: "a_drive", nome: "Google Drive", url: "https://drive.google.com", grupo: "Trabalho" },
@@ -67,7 +89,8 @@ function carregar() {
     const salvo = JSON.parse(bruto);
     /* Chave nova numa versão posterior entra com o conteúdo semeado, não
        vazia — senão quem já usava o app abriria a aba nova em branco. */
-    return { ...base, ...salvo };
+    const juntos = { ...base, ...salvo };
+    return { ...juntos, listas: atualizarNomesDeColuna(juntos.listas) };
   } catch {
     return semente();
   }
