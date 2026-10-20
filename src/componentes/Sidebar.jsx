@@ -1,5 +1,6 @@
 import { useEstado, statusInfo } from "../lib/estado.js";
 import { useCompartilhado } from "../lib/compartilhado.js";
+import { useCentral } from "../lib/central.js";
 import { usePermissoes, ABAS, abasDe } from "../lib/permissoes.js";
 
 /* A lista canônica agora mora em permissoes.js, para a tela de
@@ -11,6 +12,7 @@ export const ABA_CONFIG = { key: "config", label: "Configurações", ico: "⚙" 
 export default function Sidebar({ secao, aoTrocar }) {
   const estado = useEstado();
   const compartilhado = useCompartilhado();
+  const central = useCentral();
   const { eu, abasPadrao, permissoesPadrao } = usePermissoes();
 
   /* Configurações só aparece para admin. Não é tranca — é tirar da
@@ -28,7 +30,7 @@ export default function Sidebar({ secao, aoTrocar }) {
         .length;
     if (key === "prompts") return estado.prompts.length;
     if (key === "marcas") return (compartilhado.marcas || []).length;
-    if (key === "central") return estado.central.length;
+    if (key === "central") return central.materiais.length + central.guias.length + central.imagens.length;
     return 0;
   }
 
@@ -62,7 +64,7 @@ export default function Sidebar({ secao, aoTrocar }) {
 
       <div className="side-foot">
         <div className="hint">
-          As imagens vêm do Drive. O resto fica só neste navegador.
+          Imagens vêm do Drive. Kanban de marcas, Marcas e Central são do time.
         </div>
       </div>
     </aside>

@@ -14,6 +14,7 @@ import { useAuth } from "./lib/useAuth.js";
 import { restaurarSessao, tokenValido, renovarAcessoDrive } from "./lib/auth.js";
 import { verificarAcesso } from "./lib/drive.js";
 import { iniciar as iniciarCompartilhado } from "./lib/compartilhado.js";
+import { iniciarCentral } from "./lib/central.js";
 import {
   carregar as carregarPermissoes,
   ouvir as ouvirPermissoes,
@@ -61,6 +62,7 @@ export default function App() {
   useEffect(() => {
     if (!auth.perfil) return;
     iniciarCompartilhado();
+    iniciarCentral();
     carregarPermissoes(auth.perfil.email);
     ouvirPermissoes(auth.perfil.email);
   }, [auth.perfil?.email]);
