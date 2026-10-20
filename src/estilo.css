@@ -181,6 +181,7 @@
   .menu-item:hover { background: var(--surface-2); }
   .menu-item .mi { width: 16px; text-align: center; color: var(--text-dim); font-size: 0.8rem; }
   .menu-item .chk { margin-left: auto; color: var(--accent-text); }
+  .menu-rotulo { padding: 6px 11px 2px; font-size: 0.7rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim); }
   .menu-sep { height: 1px; background: var(--border); margin: 6px 4px; }
 
   /* ================= main ================= */
@@ -794,19 +795,6 @@
 
   /* ---------- histórico ---------- */
 
-  .hist { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
-  .hist-titulo {
-    font-size: 0.72rem; font-weight: 700; letter-spacing: .06em;
-    text-transform: uppercase; color: var(--muted); margin-bottom: 10px;
-  }
-  .hist-novo { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
-  .hist-novo textarea {
-    min-height: 64px; resize: vertical; width: 100%;
-    background: var(--bg); color: var(--text); border: 1px solid var(--border);
-    border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 0.86rem;
-  }
-  .hist-novo textarea:focus { outline: none; border-color: var(--accent); }
-  .hist-novo .btn { align-self: flex-end; }
   .hist-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
   .hist-item { display: flex; gap: 10px; padding: 7px 0; }
   .hist-ico {
@@ -929,13 +917,6 @@
   .chip-x:hover { opacity: 1; }
 
   /* ---------- comentário editável e auditoria ---------- */
-  .hist-acao {
-    margin-left: 8px; background: none; border: 0; padding: 0; cursor: pointer;
-    font: inherit; font-size: 0.72rem; color: var(--muted); text-decoration: underline;
-    text-underline-offset: 2px;
-  }
-  .hist-acao:hover { color: var(--text); }
-  .hist-acao.perigo:hover { color: var(--danger); }
 
   .aud-lista { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
   .aud-item {
@@ -956,3 +937,158 @@
     text-transform: uppercase; color: var(--muted); margin-bottom: 2px;
   }
   .aud-texto.antes { text-decoration-color: var(--danger); }
+
+  /* ---------- tela da tarefa ----------
+     Duas colunas: o que a tarefa É à esquerda, a conversa sobre ela à
+     direita. Campos brancos nos dois temas, para o que se preenche não se
+     confundir com rótulo ou fundo. A cor da lista aparece no topo e no
+     seletor, para saber onde o cartão está sem precisar ler. */
+  :root {
+    --campo-bg: #ffffff; --campo-texto: #151d23; --campo-borda: #cfd4d8; --campo-dica: #8a949b;
+    --tarefa-esq: #f6f5f2; --tarefa-dir: #eaeff3;
+    --bolha-minha: #fde7d5; --bolha-minha-borda: #f7b47a;
+    --bolha-outro: #ffffff; --bolha-outro-borda: #d5dce1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --campo-borda: #fdfdfd; --tarefa-esq: #1c262d; --tarefa-dir: #151d23;
+      --bolha-minha: #3a2415; --bolha-minha-borda: #8a4a17;
+      --bolha-outro: #24323c; --bolha-outro-borda: #3a4d5a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --campo-borda: #fdfdfd; --tarefa-esq: #1c262d; --tarefa-dir: #151d23;
+    --bolha-minha: #3a2415; --bolha-minha-borda: #8a4a17;
+    --bolha-outro: #24323c; --bolha-outro-borda: #3a4d5a;
+  }
+  :root[data-theme="light"] {
+    --campo-borda: #cfd4d8; --tarefa-esq: #f6f5f2; --tarefa-dir: #eaeff3;
+    --bolha-minha: #fde7d5; --bolha-minha-borda: #f7b47a;
+    --bolha-outro: #ffffff; --bolha-outro-borda: #d5dce1;
+  }
+
+  .modal.tarefa {
+    max-width: 1120px; padding: 0; overflow: hidden;
+    border-top: 5px solid var(--cor-lista, var(--accent));
+  }
+  .modal.tarefa.sem-painel { max-width: 680px; }
+  .modal.tarefa .modal-h { padding: 14px 22px; margin: 0; border-bottom: 1px solid var(--border); }
+  .modal.tarefa .modal-f { padding: 12px 22px; margin: 0; border-top: 1px solid var(--border); background: var(--surface); }
+  .tarefa-titulo-modal {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 0.78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim);
+  }
+  .tarefa-titulo-modal .dot, .sel-cor .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+
+  .tarefa-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); min-height: 520px; }
+  .sem-painel .tarefa-grid { grid-template-columns: 1fr; min-height: 0; }
+  @media (max-width: 860px) { .tarefa-grid { grid-template-columns: 1fr; } }
+  .tarefa-esq { background: var(--tarefa-esq); padding: 20px 22px; }
+  .tarefa-dir {
+    background: var(--tarefa-dir); padding: 16px 20px; border-left: 1px solid var(--border);
+    max-height: 72vh; overflow-y: auto;
+  }
+  @media (max-width: 860px) { .tarefa-dir { border-left: 0; border-top: 1px solid var(--border); max-height: none; } }
+
+  .modal.tarefa .field input, .modal.tarefa .field textarea, .modal.tarefa .field select,
+  .modal.tarefa .tarefa-nome, .coment-novo textarea, .coment-edita textarea {
+    background: var(--campo-bg); color: var(--campo-texto); border: 1px solid var(--campo-borda);
+    color-scheme: light;
+  }
+  .modal.tarefa input::placeholder, .modal.tarefa textarea::placeholder { color: var(--campo-dica); }
+  .modal.tarefa .field input:focus, .modal.tarefa .field textarea:focus, .modal.tarefa .field select:focus,
+  .modal.tarefa .tarefa-nome:focus, .coment-novo textarea:focus, .coment-edita textarea:focus {
+    outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .modal.tarefa .field label { color: var(--text-dim); text-transform: uppercase; letter-spacing: .05em; font-size: 0.68rem; }
+
+  .tarefa-nome {
+    width: 100%; font: inherit; font-size: 1.25rem; font-weight: 700;
+    border-radius: 10px; padding: 11px 14px; margin-bottom: 6px;
+  }
+  .tarefa-secao {
+    display: flex; align-items: center; gap: 8px; margin: 18px 0 10px;
+    font-size: 0.74rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--text);
+  }
+  .tarefa-secao::before { content: ""; width: 4px; height: 14px; border-radius: 2px; background: var(--accent); }
+  .modal.tarefa .field textarea.tarefa-notas { min-height: 170px; }
+
+  .sel-cor { position: relative; display: flex; align-items: center; }
+  .sel-cor .dot { position: absolute; left: 12px; pointer-events: none; }
+  .modal.tarefa .sel-cor select { padding-left: 30px; font-weight: 600; }
+
+  .prio-escolha { display: flex; gap: 6px; flex-wrap: wrap; }
+  .prio-op {
+    flex: 1 1 0; min-width: 72px; padding: 8px 10px; border-radius: 8px; cursor: pointer;
+    font: inherit; font-size: 0.8rem; font-weight: 600;
+    background: var(--campo-bg); color: #55606a; border: 1px solid var(--campo-borda);
+  }
+  .prio-op:disabled { cursor: default; }
+  .prio-op.on { color: #fff; }
+  .prio-baixa.on { background: #7d8a94; border-color: #7d8a94; }
+  .prio-normal.on { background: #3f7fc4; border-color: #3f7fc4; }
+  .prio-alta.on { background: #f76e00; border-color: #f76e00; color: #151d23; }
+  .prio-urgente.on { background: #c0392b; border-color: #c0392b; }
+
+  .tarefa-rodape {
+    display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center;
+    font-size: 0.78rem; color: var(--text-dim); margin-top: 4px;
+  }
+  .tarefa-rodape b { color: var(--text); font-weight: 600; }
+  .tarefa-salvo { margin-left: auto; color: var(--ok); }
+
+  /* painel da direita */
+  .painel-abas { display: flex; gap: 4px; padding: 3px; border-radius: 10px; background: var(--surface-2); margin-bottom: 14px; }
+  .painel-aba {
+    flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    padding: 8px 10px; border: 0; border-radius: 8px; background: none; cursor: pointer;
+    font: inherit; font-size: 0.84rem; font-weight: 700; color: var(--text-dim);
+  }
+  .painel-aba.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, .18); }
+  .painel-n {
+    min-width: 20px; padding: 1px 6px; border-radius: 999px; font-size: 0.7rem;
+    background: var(--border); color: var(--text);
+  }
+  .painel-aba.on .painel-n { background: var(--accent); color: var(--accent-ink); }
+  .painel-vazio {
+    text-align: center; padding: 28px 12px; font-size: 0.84rem; color: var(--text-dim);
+    border: 1px dashed var(--border); border-radius: 10px;
+  }
+
+  .coment-avatar {
+    flex: none; width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.72rem; font-weight: 800; color: #fff; letter-spacing: .02em;
+  }
+  .coment-novo { display: flex; gap: 10px; margin-bottom: 18px; }
+  .coment-novo-caixa { flex: 1; min-width: 0; }
+  .coment-novo textarea, .coment-edita textarea {
+    width: 100%; min-height: 72px; resize: vertical; border-radius: 10px;
+    padding: 9px 11px; font: inherit; font-size: 0.88rem; line-height: 1.45;
+  }
+  .coment-novo-pe { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+  .coment-novo-pe span { font-size: 0.7rem; color: var(--text-dim); }
+  .coment-novo-pe .btn { margin-left: auto; }
+
+  .coment-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+  .coment { display: flex; gap: 10px; }
+  .coment-corpo { flex: 1; min-width: 0; }
+  .coment-topo { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; font-size: 0.84rem; }
+  .coment-quando { font-size: 0.72rem; color: var(--text-dim); }
+  .coment-balao {
+    padding: 9px 12px; border-radius: 4px 12px 12px 12px; font-size: 0.88rem; line-height: 1.45;
+    white-space: pre-wrap; word-break: break-word; color: var(--text);
+    background: var(--bolha-outro); border: 1px solid var(--bolha-outro-borda);
+  }
+  .coment.meu .coment-balao { background: var(--bolha-minha); border-color: var(--bolha-minha-borda); }
+  .coment-edita .coment-botoes { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
+  .coment-acoes { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .coment-btn {
+    display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px;
+    font: inherit; font-size: 0.74rem; font-weight: 600; cursor: pointer;
+    background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  }
+  .coment-btn:hover { border-color: var(--accent); color: var(--accent-text); }
+  .coment-btn.perigo:hover { border-color: var(--danger); color: var(--danger); }
+  .coment-btn.perigo.cheio { background: var(--danger); border-color: var(--danger); color: #fff; }
+  .coment-pergunta { font-size: 0.76rem; font-weight: 600; color: var(--danger); }

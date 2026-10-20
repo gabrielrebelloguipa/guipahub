@@ -2,7 +2,7 @@ import { useState } from "react";
 import { PRIORIDADES, LISTA_CORES, hojeChave, fmtData, diasAte } from "../lib/constantes.js";
 import Modal, { Confirmar } from "./Modal.jsx";
 import { useArrastar, useArrastarColuna } from "../lib/useArrastar.js";
-import { HistoricoCartao } from "./Historico.jsx";
+import { PainelCartao } from "./Historico.jsx";
 import CartaoEmVoo from "./CartaoEmVoo.jsx";
 
 /* O quadro, sem saber de onde vêm os dados.
@@ -45,13 +45,21 @@ function CartaoModal({ tarefa, listas, api, aoFechar, pode = TUDO, historico }) 
   /* Quem só pode mover ainda troca a lista pelo seletor — é o mesmo
      gesto do arraste, em outro lugar. Os outros campos ficam travados. */
   const soLe = !pode.editar;
+  const lista = listas.find((L) => L.id === d.status);
+  const cor = lista?.cor || "var(--accent)";
 
   return (
     <>
       <Modal
-        titulo="Tarefa"
+        titulo={
+          <span className="tarefa-titulo-modal">
+            <span className="dot" style={{ background: cor }} />
+            {lista?.nome || "Tarefa"}
+          </span>
+        }
         aoFechar={aoFechar}
-        largo
+        classe={"tarefa" + (historico ? "" : " sem-painel")}
+        estilo={{ "--cor-lista": cor }}
         acoes={
           <>
             {pode.excluir && (
@@ -64,95 +72,114 @@ function CartaoModal({ tarefa, listas, api, aoFechar, pode = TUDO, historico }) 
                 Excluir tarefa
               </button>
             )}
-            <button className="btn" type="button" onClick={aoFechar}>
-              Fechar
+            <button className="btn primary" type="button" onClick={aoFechar}>
+              Pronto
             </button>
           </>
         }
       >
-        <div className="field">
-          <input
-            type="text"
-            value={d.titulo}
-            placeholder="Título da tarefa"
-            style={{ fontSize: "1rem", fontWeight: 700 }}
-              readOnly={soLe}
-            onChange={(e) => grava({ titulo: e.target.value })}
-          />
-        </div>
-        <div className="f-row">
-          <div className="field">
-            <label>Solicitante</label>
+        <div className="tarefa-grid">
+          <div className="tarefa-esq">
             <input
+              className="tarefa-nome"
               type="text"
-              value={d.solicitante || ""}
-              placeholder="Quem pediu"
+              value={d.titulo}
+              placeholder="Nome da tarefa"
               readOnly={soLe}
-              onChange={(e) => grava({ solicitante: e.target.value })}
+              onChange={(e) => grava({ titulo: e.target.value })}
             />
-          </div>
-          <div className="field">
-            <label>Prazo</label>
-            <input
-              type="date"
-              value={d.prazo || ""}
-              readOnly={soLe}
-              onChange={(e) => grava({ prazo: e.target.value })}
-            />
-          </div>
-          <div className="field">
-            <label>Prioridade</label>
-            <select
-              disabled={soLe}
-              value={d.prioridade || "normal"}
-              onChange={(e) => grava({ prioridade: e.target.value })}
-            >
-              {PRIORIDADES.map((p) => (
-                <option key={p.key} value={p.key}>{p.label}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <div className="field">
-          <label>Lista</label>
-          <select
-            value={d.status}
-            disabled={!pode.mover && !pode.editar}
-            onChange={(e) => grava({ status: e.target.value })}
-          >
-            {listas.map((L) => (
-              <option key={L.id} value={L.id}>{L.nome}</option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label>Notas</label>
-          <textarea
-            value={d.notas || ""}
-            style={{ minHeight: 150 }}
-            placeholder="Briefing, links, o que ficou combinado…"
-            readOnly={soLe}
-            onChange={(e) => grava({ notas: e.target.value })}
-          />
-        </div>
-        <div className="kv">
-          <div className="k">Criada em</div>
-          <div className="v">
-            {fmtData(d.criadoEm)}
-            {historico && d.criadoPor ? " por " + historico.nome(d.criadoPor) : ""}
-          </div>
-        </div>
 
-        {/* Só nos quadros de marca: o pessoal é de uma pessoa só, e um
-            histórico de "você fez, você fez, você fez" não diria nada. */}
-        {historico && (
-          <HistoricoCartao
-            quadroId={historico.quadroId}
-            cartao={d}
-            podeComentar={historico.podeComentar}
-            perfil={historico.perfil}
-          />
-        )}
+            <div className="tarefa-secao">Detalhes</div>
+            <div className="f-row">
+              <div className="field">
+                <label>Lista</label>
+                <div className="sel-cor">
+                  <span className="dot" style={{ background: cor }} />
+                  <select
+                    value={d.status}
+                    disabled={!pode.mover && !pode.editar}
+                    onChange={(e) => grava({ status: e.target.value })}
+                  >
+                    {listas.map((L) => (
+                      <option key={L.id} value={L.id}>{L.nome}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="field">
+                <label>Prazo</label>
+                <input
+                  type="date"
+                  value={d.prazo || ""}
+                  readOnly={soLe}
+                  onChange={(e) => grava({ prazo: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="f-row">
+              <div className="field">
+                <label>Solicitante</label>
+                <input
+                  type="text"
+                  value={d.solicitante || ""}
+                  placeholder="Quem pediu"
+                  readOnly={soLe}
+                  onChange={(e) => grava({ solicitante: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="field">
+              <label>Prioridade</label>
+              <div className="prio-escolha" role="radiogroup" aria-label="Prioridade">
+                {PRIORIDADES.map((p) => (
+                  <button
+                    key={p.key}
+                    type="button"
+                    role="radio"
+                    aria-checked={(d.prioridade || "normal") === p.key}
+                    disabled={soLe}
+                    className={"prio-op prio-" + p.key + ((d.prioridade || "normal") === p.key ? " on" : "")}
+                    onClick={() => grava({ prioridade: p.key })}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="tarefa-secao">Notas</div>
+            <div className="field">
+              <textarea
+                value={d.notas || ""}
+                className="tarefa-notas"
+                placeholder="Briefing, links, o que ficou combinado…"
+                readOnly={soLe}
+                onChange={(e) => grava({ notas: e.target.value })}
+              />
+            </div>
+
+            <div className="tarefa-rodape">
+              Criada em {fmtData(d.criadoEm)}
+              {historico && d.criadoPor ? <> por <b>{historico.nome(d.criadoPor)}</b></> : null}
+              <span className="tarefa-salvo">✓ salva sozinha a cada mudança</span>
+            </div>
+          </div>
+
+          {/* Só nos quadros de marca: o pessoal é de uma pessoa só, e uma
+              conversa consigo mesmo não precisa de coluna. */}
+          {historico && (
+            <aside className="tarefa-dir">
+              <PainelCartao
+                quadroId={historico.quadroId}
+                cartao={d}
+                podeComentar={historico.podeComentar}
+                perfil={historico.perfil}
+              />
+            </aside>
+          )}
+        </div>
       </Modal>
 
       {excluindo && (

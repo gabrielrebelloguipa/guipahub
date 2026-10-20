@@ -1,9 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../lib/useAuth.js";
 import { sair } from "../lib/auth.js";
+import { useTema, definirTema } from "../lib/tema.js";
+
+const TEMAS = [
+  ["sistema", "Padrão do navegador", "⚙"],
+  ["light", "Claro", "☀"],
+  ["dark", "Escuro", "☾"],
+];
 
 export default function Topbar({ busca, aoBuscar }) {
   const auth = useAuth();
+  const tema = useTema();
   const [menuAberto, setMenuAberto] = useState(false);
   const caixa = useRef(null);
 
@@ -53,6 +61,19 @@ export default function Topbar({ busca, aoBuscar }) {
               <div className="n">{auth.perfil?.nome || "Sem sessão"}</div>
               <div className="e">{auth.perfil?.email || "—"}</div>
             </div>
+            <div className="menu-rotulo">Tema</div>
+            {TEMAS.map(([chave, rotulo, icone]) => (
+              <button
+                key={chave}
+                className="menu-item"
+                type="button"
+                onClick={() => definirTema(chave)}
+              >
+                <span className="mi">{icone}</span>
+                <span>{rotulo}</span>
+                {tema === chave && <span className="chk">✓</span>}
+              </button>
+            ))}
             {auth.perfil && (
               <>
                 <div className="menu-sep" />

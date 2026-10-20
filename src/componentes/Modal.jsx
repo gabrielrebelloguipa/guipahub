@@ -10,6 +10,8 @@ export default function Modal({
   children,
   acoes,
   largo = false,
+  classe = "",
+  estilo,
 }) {
   useEffect(() => {
     function esc(ev) {
@@ -22,7 +24,8 @@ export default function Modal({
   return (
     <div className="overlay" onClick={aoFechar}>
       <div
-        className={"modal" + (largo ? " wide" : "")}
+        className={"modal" + (largo ? " wide" : "") + (classe ? " " + classe : "")}
+        style={estilo}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-h">
