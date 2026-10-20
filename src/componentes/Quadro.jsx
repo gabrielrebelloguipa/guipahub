@@ -161,8 +161,12 @@ function CartaoModal({ tarefa, listas, api, aoFechar, pode = TUDO, historico }) 
             </div>
 
             <div className="tarefa-rodape">
-              Criada em {fmtData(d.criadoEm)}
-              {historico && d.criadoPor ? <> por <b>{historico.nome(d.criadoPor)}</b></> : null}
+              {/* Num span só: o rodapé é flex com gap, e cada pedaço de
+                  texto solto viraria um item com espaço a mais entre eles. */}
+              <span>
+                Criada em {fmtData(d.criadoEm)}
+                {historico && d.criadoPor ? <> por <b>{historico.nome(d.criadoPor)}</b></> : null}
+              </span>
               <span className="tarefa-salvo">✓ salva sozinha a cada mudança</span>
             </div>
           </div>
