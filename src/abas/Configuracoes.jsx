@@ -467,9 +467,9 @@ function ConfigDrive({ ehAdmin, meuEmail }) {
   return (
     <>
       <div className="banner">
-        <b>De onde a aba Clientes lê o acervo.</b> A aba só enxerga o que
+        <b>De onde a aba Imagens lê o acervo.</b> A aba só enxerga o que
         estiver dentro desta pasta, em qualquer profundidade — nunca nada fora
-        dela. Sem uma pasta escolhida aqui, a aba Clientes não tem onde
+        dela. Sem uma pasta escolhida aqui, a aba Imagens não tem onde
         procurar, e avisa isso para quem abrir.
       </div>
 
