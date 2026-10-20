@@ -12,11 +12,6 @@ import {
 } from "../lib/permissoes.js";
 import { buscarPastas } from "../lib/drive.js";
 
-const SUBABAS = [
-  { key: "permissoes", label: "Permissões de usuário" },
-  { key: "drive", label: "Drive" },
-];
-
 /* ---------- permissões ---------- */
 
 function LinhaAba({ chave, marcada, aoMudar, desabilitada }) {
@@ -304,10 +299,24 @@ function ConfigDrive({ ehAdmin, meuEmail }) {
 
 /* ---------- a aba ---------- */
 
+/* Mesma ideia da Central: sub-aba escondia metade da tela atras de um
+   clique, e quem abre Configuracoes costuma mexer nas duas coisas na
+   mesma sentada. Empilhado, as duas estao a uma rolagem. */
+function Secao({ titulo, sub, children }) {
+  return (
+    <section className="secao">
+      <div className="secao-h">
+        <h2>{titulo}</h2>
+        {sub && <span>{sub}</span>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export default function Configuracoes() {
   const auth = useAuth();
   const { eu, carregando, erro } = usePermissoes();
-  const [sub, setSub] = useState("permissoes");
   const ehAdmin = !!eu?.admin;
 
   if (carregando) return <div className="empty">Carregando configurações…</div>;
@@ -329,23 +338,13 @@ export default function Configuracoes() {
         </div>
       )}
 
-      <div className="chips">
-        {SUBABAS.map((s) => (
-          <button
-            key={s.key}
-            type="button"
-            className={"chip" + (sub === s.key ? " on" : "")}
-            onClick={() => setSub(s.key)}
-          >
-            {s.label}
-          </button>
-        ))}
-      </div>
-
-      {sub === "permissoes" && (
+      <Secao titulo="Permissões de usuário" sub="Quem vê o quê, e o padrão de quem entra">
         <Permissoes ehAdmin={ehAdmin} meuEmail={auth.perfil?.email} />
-      )}
-      {sub === "drive" && <ConfigDrive ehAdmin={ehAdmin} meuEmail={auth.perfil?.email} />}
+      </Secao>
+
+      <Secao titulo="Drive" sub="De onde a aba Imagens lê o acervo">
+        <ConfigDrive ehAdmin={ehAdmin} meuEmail={auth.perfil?.email} />
+      </Secao>
     </>
   );
 }

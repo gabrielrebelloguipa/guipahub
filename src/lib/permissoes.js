@@ -31,10 +31,16 @@ export const ABAS = [
 
 export const TODAS_AS_CHAVES = ABAS.map((a) => a.key);
 
+/* Mesmo conjunto que o 04-pendentes.sql grava no banco. O valor do
+   banco manda; este aqui so aparece no piscar antes da resposta, e
+   discordar dele faria a sidebar trocar de tamanho na frente da
+   pessoa. Marcas e Prompts ficam de fora ate estarem prontas. */
+const ABAS_PADRAO_INICIAL = ["hoje", "demandas", "central", "clientes"];
+
 const vazio = () => ({
   perfis: [],
   eu: null,
-  abasPadrao: TODAS_AS_CHAVES,
+  abasPadrao: ABAS_PADRAO_INICIAL,
   drive: { raizId: "", raizNome: "" },
   carregando: temSupabase(),
   erro: "",
@@ -99,7 +105,7 @@ export async function carregar(meuEmail) {
     definir({
       perfis,
       eu: perfis.find((p) => p.email?.toLowerCase() === String(meuEmail).toLowerCase()) || null,
-      abasPadrao: porChave.abas_padrao || TODAS_AS_CHAVES,
+      abasPadrao: porChave.abas_padrao || ABAS_PADRAO_INICIAL,
       drive: { ...vazio().drive, ...(porChave.drive || {}) },
       carregando: false,
       erro: "",

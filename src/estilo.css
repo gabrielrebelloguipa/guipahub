@@ -695,3 +695,20 @@
     font-size: 0.9rem; font-weight: 600; color: var(--text);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+
+  /* ---------- secoes empilhadas (Central, Configuracoes) ---------- */
+
+  /* Substitui sub-abas. O titulo precisa separar sem competir com o h1
+     da pagina, entao e menor e a regra abaixo dele faz o corte. */
+  .secao { margin-bottom: 34px; }
+  .secao:last-child { margin-bottom: 0; }
+  .secao-h {
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    margin-bottom: 14px; padding-bottom: 9px;
+    border-bottom: 1px solid var(--border);
+  }
+  .secao-h h2 {
+    margin: 0; font-size: 1.02rem; font-weight: 700;
+    letter-spacing: -0.01em; color: var(--text);
+  }
+  .secao-h span { font-size: 0.8rem; color: var(--muted); }

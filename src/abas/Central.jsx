@@ -27,12 +27,6 @@ const MARCA_TIPO = "SF Pro — toda a comunicação.";
 const MARCA_ALERTA =
   "Materiais antigos (kit Canva) usam laranja #FC7309. O oficial do brandbook é #F76E00 — em conflito, vale o brandbook.";
 
-const ABAS = [
-  { key: "materiais", label: "Materiais" },
-  { key: "imagens", label: "Imagens GUIPA" },
-  { key: "guias", label: "Guias e medidas" },
-];
-
 /* ---------- Materiais ---------- */
 
 function FormMaterial({ inicial, aoFechar }) {
@@ -119,7 +113,6 @@ function Materiais({ busca }) {
   const [editando, setEditando] = useState(null);
   const [criando, setCriando] = useState(false);
   const [excluindo, setExcluindo] = useState(null);
-  const [copiado, setCopiado] = useState("");
 
   const lista = estado.central
     .filter((m) => (estado.filtroCat ? m.categoria === estado.filtroCat : true))
@@ -207,44 +200,6 @@ function Materiais({ busca }) {
           ))}
         </div>
       )}
-
-      <div className="card" style={{ marginTop: 16 }}>
-        <div className="card-h">
-          <div className="t">Cores GUIPA</div>
-        </div>
-        <div className="sw-grid">
-          {MARCA_CORES.map((c) => (
-            <button
-              className="sw"
-              key={c.hex}
-              type="button"
-              title="Clique para copiar o hex"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(c.hex);
-                  setCopiado(c.hex);
-                  setTimeout(() => setCopiado(""), 1400);
-                } catch {
-                  /* clipboard bloqueado: o hex está escrito no card mesmo */
-                }
-              }}
-            >
-              <div className="chip-cor" style={{ background: c.hex }} />
-              <div className="info">
-                <div className="n">{c.nome}</div>
-                <div className="h">{copiado === c.hex ? "copiado ✓" : c.hex}</div>
-                <div className="u">{c.uso}</div>
-              </div>
-            </button>
-          ))}
-        </div>
-        <div className="sub" style={{ marginTop: 12 }}>
-          <b>Tipografia:</b> {MARCA_TIPO}
-        </div>
-        <div className="banner" style={{ marginTop: 10 }}>
-          {MARCA_ALERTA}
-        </div>
-      </div>
 
       {criando && <FormMaterial aoFechar={() => setCriando(false)} />}
       {editando && (
@@ -425,6 +380,53 @@ function ImagensGuipa({ busca }) {
   );
 }
 
+/* As cores moram aqui, e nao em Materiais, porque quem procura cor
+   esta procurando medida da marca -- nao um arquivo para baixar. */
+function CoresGuipa() {
+  const [copiado, setCopiado] = useState("");
+  return (
+    <>
+    <div className="card">
+      <div className="card-h">
+        <div className="t">Cores GUIPA</div>
+      </div>
+      <div className="sw-grid">
+        {MARCA_CORES.map((c) => (
+          <button
+            className="sw"
+            key={c.hex}
+            type="button"
+            title="Clique para copiar o hex"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(c.hex);
+                setCopiado(c.hex);
+                setTimeout(() => setCopiado(""), 1400);
+              } catch {
+                /* clipboard bloqueado: o hex está escrito no card mesmo */
+              }
+            }}
+          >
+            <div className="chip-cor" style={{ background: c.hex }} />
+            <div className="info">
+              <div className="n">{c.nome}</div>
+              <div className="h">{copiado === c.hex ? "copiado ✓" : c.hex}</div>
+              <div className="u">{c.uso}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+      <div className="sub" style={{ marginTop: 12 }}>
+        <b>Tipografia:</b> {MARCA_TIPO}
+      </div>
+      <div className="banner" style={{ marginTop: 10 }}>
+        {MARCA_ALERTA}
+      </div>
+    </div>
+    </>
+  );
+}
+
 /* ---------- Guias e medidas ---------- */
 
 function FormGuia({ inicial, aoFechar }) {
@@ -517,7 +519,9 @@ function Guias({ busca }) {
 
   return (
     <>
-      <div className="chips">
+      <CoresGuipa />
+
+      <div className="chips" style={{ marginTop: 16 }}>
         {pendentes > 0 && (
           <span className="tag" style={{ color: "var(--warn)", borderColor: "var(--warn)" }}>
             {pendentes} a confirmar
@@ -580,28 +584,36 @@ function Guias({ busca }) {
 
 /* ---------- a aba ---------- */
 
-export default function Central({ busca }) {
-  const estado = useEstado();
-  const aba = estado.centralAba || "materiais";
+/* Antes eram tres sub-abas. O problema nao era o conteudo, era ter que
+   lembrar em qual delas cada coisa estava -- e a Central e consultada no
+   meio de outra tarefa, quando ninguem quer navegar. Empilhado, rolar
+   resolve, e a busca do topo atravessa as tres de uma vez. */
+function Secao({ titulo, sub, children }) {
+  return (
+    <section className="secao">
+      <div className="secao-h">
+        <h2>{titulo}</h2>
+        {sub && <span>{sub}</span>}
+      </div>
+      {children}
+    </section>
+  );
+}
 
+export default function Central({ busca }) {
   return (
     <>
-      <div className="chips">
-        {ABAS.map((a) => (
-          <button
-            key={a.key}
-            type="button"
-            className={"chip" + (aba === a.key ? " on" : "")}
-            onClick={() => alterar({ centralAba: a.key })}
-          >
-            {a.label}
-          </button>
-        ))}
-      </div>
+      <Secao titulo="Materiais" sub="Logo, kit, apresentacoes — o que se baixa">
+        <Materiais busca={busca} />
+      </Secao>
 
-      {aba === "materiais" && <Materiais busca={busca} />}
-      {aba === "imagens" && <ImagensGuipa busca={busca} />}
-      {aba === "guias" && <Guias busca={busca} />}
+      <Secao titulo="Imagens GUIPA" sub="Referencias e renders da frota">
+        <ImagensGuipa busca={busca} />
+      </Secao>
+
+      <Secao titulo="Guias e medidas" sub="Cores, tipografia e as medidas de cada midia">
+        <Guias busca={busca} />
+      </Secao>
     </>
   );
 }
