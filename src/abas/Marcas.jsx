@@ -1,3 +1,4 @@
+import { usePode, pode } from "../lib/permissoes.js";
 import { useState } from "react";
 import {
   useCompartilhado,
@@ -226,6 +227,7 @@ function FormMarca({ inicial, aoFechar }) {
 
 function Detalhe({ marca, aoFechar, aoEditar, aoExcluir }) {
   const compartilhado = useCompartilhado();
+  const podeFazer = usePode();
   const temQuadro = !!quadroDaMarca(compartilhado, marca.id);
 
   return (
@@ -235,20 +237,24 @@ function Detalhe({ marca, aoFechar, aoEditar, aoExcluir }) {
       largo
       acoes={
         <>
-          <button
-            className="btn sm ghost danger"
-            type="button"
-            style={{ marginRight: "auto" }}
-            onClick={aoExcluir}
-          >
-            Excluir marca
-          </button>
+          {podeFazer("marcas", "excluir") && (
+            <button
+              className="btn sm ghost danger"
+              type="button"
+              style={{ marginRight: "auto" }}
+              onClick={aoExcluir}
+            >
+              Excluir marca
+            </button>
+          )}
           <button className="btn ghost" type="button" onClick={aoFechar}>
             Fechar
           </button>
-          <button className="btn primary" type="button" onClick={aoEditar}>
-            Editar
-          </button>
+          {podeFazer("marcas", "editar") && (
+            <button className="btn primary" type="button" onClick={aoEditar}>
+              Editar
+            </button>
+          )}
         </>
       }
     >
@@ -344,14 +350,16 @@ export default function Marcas({ busca }) {
             {n} ({compartilhado.marcas.filter((m) => m.nicho === n).length})
           </button>
         ))}
-        <button
-          className="btn primary sm"
-          type="button"
-          style={{ marginLeft: "auto" }}
-          onClick={() => setCriando(true)}
-        >
-          ＋ Nova marca
-        </button>
+        {pode("marcas", "criar") && (
+          <button
+            className="btn primary sm"
+            type="button"
+            style={{ marginLeft: "auto" }}
+            onClick={() => setCriando(true)}
+          >
+            ＋ Nova marca
+          </button>
+        )}
       </div>
 
       {!marcas.length ? (

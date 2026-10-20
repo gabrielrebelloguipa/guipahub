@@ -712,3 +712,39 @@
     letter-spacing: -0.01em; color: var(--text);
   }
   .secao-h span { font-size: 0.8rem; color: var(--muted); }
+
+  /* ---------- matriz de permissões ---------- */
+
+  /* Larga por natureza (seis áreas por oito ações): rola sozinha em vez
+     de empurrar a página para o lado no celular. */
+  .matriz-rola { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+  .matriz { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 0.84rem; }
+  .matriz th, .matriz td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: center; }
+  .matriz thead th {
+    font-size: 0.7rem; font-weight: 600; letter-spacing: .03em;
+    text-transform: uppercase; color: var(--muted); background: var(--surface-2);
+    white-space: nowrap;
+  }
+  .matriz tbody th { text-align: left; font-weight: 600; white-space: nowrap; color: var(--text); }
+  .matriz tbody tr:last-child th, .matriz tbody tr:last-child td { border-bottom: 0; }
+  .matriz td.na { color: var(--border); }
+  /* Área sem "ver": as ações continuam à vista, mas apagadas, para que
+     fique claro por que não dá para marcá-las. */
+  .matriz tr.apagada th { color: var(--muted); font-weight: 500; }
+  .mz-cel { display: inline-flex; align-items: center; gap: 2px; cursor: pointer; }
+  .mz-cel input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
+  .mz-cel input:disabled { cursor: default; opacity: .45; }
+  .mz-asterisco { color: var(--warn, var(--accent)); font-weight: 700; font-size: 0.8rem; }
+
+  /* Uma linha por pessoa, que abre a matriz dela. Fechadas por padrão:
+     com o time inteiro dentro, matrizes abertas virariam um muro. */
+  .pessoa { border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; overflow: hidden; }
+  .pessoa-h {
+    display: flex; align-items: center; gap: 8px; width: 100%;
+    font: inherit; font-size: 0.9rem; color: var(--text); text-align: left;
+    background: var(--surface); border: 0; padding: 11px 14px; cursor: pointer;
+  }
+  .pessoa-h:hover, .pessoa-h.on { background: var(--surface-2); }
+  .pessoa-nome { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pessoa-estado { margin-left: auto; color: var(--muted); font-size: 0.78rem; white-space: nowrap; }
+  .pessoa-corpo { padding: 12px 14px 14px; border-top: 1px solid var(--border); background: var(--bg); }

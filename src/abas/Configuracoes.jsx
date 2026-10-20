@@ -2,11 +2,12 @@ import { useState } from "react";
 import { useAuth } from "../lib/useAuth.js";
 import {
   usePermissoes,
-  ABAS,
-  TODAS_AS_CHAVES,
-  abasDe,
-  salvarAbasDe,
-  salvarAbasPadrao,
+  AREAS,
+  ROTULO_ACAO,
+  ACOES_SEM_TRANCA,
+  podeNoPerfil,
+  salvarPermissoesDe,
+  salvarPermissoesPadrao,
   definirAdmin,
   salvarDrive,
 } from "../lib/permissoes.js";
@@ -14,27 +15,94 @@ import { buscarPastas } from "../lib/drive.js";
 
 /* ---------- permissões ---------- */
 
-function LinhaAba({ chave, marcada, aoMudar, desabilitada }) {
-  const aba = ABAS.find((a) => a.key === chave);
+/* Colunas na ordem em que a pessoa pensa: primeiro "enxergo?", depois
+   o que faço, do mais leve ao mais destrutivo. */
+const COLUNAS = ["ver", "criar", "editar", "mover", "excluir", "colunas", "baixar", "publicar"];
+const COLUNAS_USADAS = COLUNAS.filter((c) => AREAS.some((a) => a.acoes.includes(c)));
+
+/* O mapa completo {area: {acao: bool}} de alguém, já resolvido: exceção
+   da pessoa por cima do padrão. É o que a matriz desenha e o que se
+   grava quando alguém é personalizado. Gravar o resolvido inteiro, e
+   não só a célula mexida, evita que a exceção dependa de um padrão que
+   pode mudar depois. */
+function resolvido(perfil, padrao) {
+  const r = {};
+  for (const a of AREAS) {
+    r[a.key] = {};
+    for (const acao of a.acoes) r[a.key][acao] = podeNoPerfil(perfil, padrao, a.key, acao);
+  }
+  return r;
+}
+
+function Matriz({ valor, aoMudar, desabilitada }) {
   return (
-    <label className={"chip" + (marcada ? " on" : "")} style={{ cursor: desabilitada ? "default" : "pointer" }}>
-      <input
-        type="checkbox"
-        checked={marcada}
-        disabled={desabilitada}
-        onChange={(e) => aoMudar(e.target.checked)}
-        style={{ marginRight: 6 }}
-      />
-      <span className="ico">{aba?.ico}</span>
-      <span>{aba?.label}</span>
-    </label>
+    <div className="matriz-rola">
+      <table className="matriz">
+        <thead>
+          <tr>
+            <th />
+            {COLUNAS_USADAS.map((c) => (
+              <th key={c}>{ROTULO_ACAO[c]}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {AREAS.map((a) => {
+            const enxerga = valor[a.key]?.ver;
+            return (
+              <tr key={a.key} className={enxerga ? "" : "apagada"}>
+                <th scope="row">{a.label}</th>
+                {COLUNAS_USADAS.map((c) => {
+                  if (!a.acoes.includes(c)) return <td key={c} className="na">—</td>;
+                  const marcada = !!valor[a.key]?.[c];
+                  /* Sem "ver", as outras ações não têm onde acontecer:
+                     ficam visíveis mas travadas, para não parecer que
+                     alguém pode excluir cartão numa aba que nem enxerga. */
+                  const travada = desabilitada || (c !== "ver" && !enxerga);
+                  const semTranca = (ACOES_SEM_TRANCA[a.key] || []).includes(c);
+                  return (
+                    <td key={c}>
+                      <label
+                        className="mz-cel"
+                        title={semTranca ? "Só na tela: para o banco, mover e editar são a mesma operação." : ""}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={marcada}
+                          disabled={travada}
+                          onChange={(e) => aoMudar(a.key, c, e.target.checked)}
+                        />
+                        {semTranca && <span className="mz-asterisco">*</span>}
+                      </label>
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
+/* Desligar "ver" leva junto as outras ações da área: ação escondida
+   numa aba que não aparece seria permissão fantasma, que volta a valer
+   no dia em que alguém religar só o "ver". */
+function aplicar(mapa, area, acao, ligar) {
+  const novo = JSON.parse(JSON.stringify(mapa));
+  novo[area][acao] = ligar;
+  if (acao === "ver" && !ligar) {
+    for (const k of Object.keys(novo[area])) novo[area][k] = false;
+  }
+  return novo;
+}
+
 function Permissoes({ ehAdmin, meuEmail }) {
-  const { perfis, abasPadrao } = usePermissoes();
+  const { perfis, permissoesPadrao } = usePermissoes();
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState("");
+  const [aberto, setAberto] = useState(null);
 
   async function mexer(fn, marca) {
     setSalvando(marca);
@@ -44,13 +112,15 @@ function Permissoes({ ehAdmin, meuEmail }) {
     if (!r.ok) setErro(r.erro);
   }
 
+  const padraoResolvido = resolvido(null, permissoesPadrao);
+
   return (
     <>
       <div className="banner">
-        <b>Isto organiza a tela, não tranca dado.</b> Esconder uma aba tira a
-        poluição de quem não usa aquilo — mas quem souber abrir o console do
-        navegador ainda alcança o conteúdo. O que protege de verdade é o Drive
-        (cada um só vê as pastas que já vê lá) e as regras do banco.
+        <b>Isto vale de verdade.</b> Desmarcar "Excluir" no Kanban não só
+        esconde o botão: o banco passa a recusar a exclusão, mesmo de quem
+        tentar pelo console. Admin passa por cima de tudo, para nunca ficar
+        sem como desfazer.
       </div>
 
       {erro && (
@@ -62,33 +132,26 @@ function Permissoes({ ehAdmin, meuEmail }) {
 
       <div className="card">
         <div className="card-h">
-          <div className="t">Abas padrão de quem entra pela primeira vez</div>
+          <div className="t">Padrão de quem entra</div>
         </div>
-        <div className="sub" style={{ marginBottom: 10 }}>
-          Vale para todo mundo que não tiver exceção própria — inclusive quem
-          já entrou e nunca foi personalizado. Mudar aqui muda para eles junto.
+        <div className="sub" style={{ marginBottom: 12 }}>
+          Vale para todo mundo sem exceção própria, inclusive quem já entrou e
+          nunca foi personalizado. Mudar aqui muda para eles junto.
         </div>
-        <div className="chips">
-          {TODAS_AS_CHAVES.map((k) => (
-            <LinhaAba
-              key={k}
-              chave={k}
-              marcada={abasPadrao.includes(k)}
-              desabilitada={!ehAdmin || salvando === "padrao"}
-              aoMudar={(marcar) =>
-                mexer(
-                  () =>
-                    salvarAbasPadrao(
-                      marcar
-                        ? TODAS_AS_CHAVES.filter((x) => abasPadrao.includes(x) || x === k)
-                        : abasPadrao.filter((x) => x !== k),
-                      meuEmail
-                    ),
-                  "padrao"
-                )
-              }
-            />
-          ))}
+        <Matriz
+          valor={padraoResolvido}
+          desabilitada={!ehAdmin || salvando === "padrao"}
+          aoMudar={(area, acao, ligar) =>
+            mexer(
+              () => salvarPermissoesPadrao(aplicar(padraoResolvido, area, acao, ligar), meuEmail),
+              "padrao"
+            )
+          }
+        />
+        <div className="sub" style={{ marginTop: 10 }}>
+          <span className="mz-asterisco">*</span> Mover cartão é separado só na
+          tela. Para o banco, mover e editar são a mesma operação: quem pode
+          um consegue o outro pelo console.
         </div>
       </div>
 
@@ -97,72 +160,72 @@ function Permissoes({ ehAdmin, meuEmail }) {
           <div className="t">Pessoas ({perfis.length})</div>
         </div>
         <div className="sub" style={{ marginBottom: 12 }}>
-          Só aparece quem já entrou pelo menos uma vez. Não dá para preparar a
-          permissão de alguém antes do primeiro login — a conta só passa a
-          existir quando a pessoa entra.
+          Só aparece quem já entrou pelo menos uma vez. A conta passa a existir
+          no primeiro login, então não dá para preparar a permissão antes.
         </div>
 
         {perfis.map((p) => {
-          const personalizado = p.abas !== null;
-          const atuais = abasDe(p, abasPadrao);
+          const personalizado = p.permissoes != null;
           const souEu = p.email?.toLowerCase() === String(meuEmail).toLowerCase();
+          const valor = resolvido(p, permissoesPadrao);
+          const expandido = aberto === p.id;
           return (
-            <div key={p.id} className="card" style={{ marginBottom: 10, background: "var(--bg)" }}>
-              <div className="card-h">
-                <div className="t" style={{ textTransform: "none", color: "var(--text)", fontSize: "0.9rem" }}>
-                  {p.nome || p.email}
-                  {p.admin && <span className="tag" style={{ marginLeft: 8 }}>admin</span>}
-                  {souEu && <span className="tag" style={{ marginLeft: 6 }}>você</span>}
-                </div>
-                <div className="a">
-                  {!personalizado ? (
-                    <span className="sub">usando o padrão</span>
+            <div key={p.id} className="pessoa">
+              <button
+                type="button"
+                className={"pessoa-h" + (expandido ? " on" : "")}
+                onClick={() => setAberto(expandido ? null : p.id)}
+              >
+                <span className="arv-seta">{expandido ? "▾" : "▸"}</span>
+                <span className="pessoa-nome">{p.nome || p.email}</span>
+                {p.admin && <span className="tag">admin</span>}
+                {souEu && <span className="tag">você</span>}
+                <span className="pessoa-estado">
+                  {p.admin ? "faz tudo" : personalizado ? "personalizado" : "usando o padrão"}
+                </span>
+              </button>
+
+              {expandido && (
+                <div className="pessoa-corpo">
+                  <div className="sub" style={{ marginBottom: 10 }}>{p.email}</div>
+
+                  {p.admin ? (
+                    <div className="empty" style={{ textAlign: "left" }}>
+                      Admin vê e faz tudo, em todas as áreas. Para restringir,
+                      tire o admin primeiro.
+                    </div>
                   ) : (
-                    <button
-                      className="btn sm ghost"
-                      type="button"
-                      disabled={!ehAdmin}
-                      onClick={() => mexer(() => salvarAbasDe(p.id, null), p.id)}
-                    >
-                      Voltar ao padrão
-                    </button>
+                    <Matriz
+                      valor={valor}
+                      desabilitada={!ehAdmin || salvando === p.id}
+                      aoMudar={(area, acao, ligar) =>
+                        mexer(() => salvarPermissoesDe(p.id, aplicar(valor, area, acao, ligar)), p.id)
+                      }
+                    />
                   )}
+
+                  <div className="chips" style={{ marginTop: 12 }}>
+                    {personalizado && !p.admin && (
+                      <button
+                        className="btn sm ghost"
+                        type="button"
+                        disabled={!ehAdmin}
+                        onClick={() => mexer(() => salvarPermissoesDe(p.id, null), p.id)}
+                      >
+                        Voltar ao padrão
+                      </button>
+                    )}
+                    {ehAdmin && !souEu && (
+                      <button
+                        className="btn sm ghost"
+                        type="button"
+                        onClick={() => mexer(() => definirAdmin(p.id, !p.admin), p.id)}
+                      >
+                        {p.admin ? "Tirar de admin" : "Tornar admin"}
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <div className="sub" style={{ marginBottom: 8 }}>{p.email}</div>
-
-              <div className="chips">
-                {TODAS_AS_CHAVES.map((k) => (
-                  <LinhaAba
-                    key={k}
-                    chave={k}
-                    marcada={atuais.includes(k)}
-                    desabilitada={!ehAdmin || salvando === p.id}
-                    aoMudar={(marcar) =>
-                      mexer(
-                        () =>
-                          salvarAbasDe(
-                            p.id,
-                            marcar
-                              ? TODAS_AS_CHAVES.filter((x) => atuais.includes(x) || x === k)
-                              : atuais.filter((x) => x !== k)
-                          ),
-                        p.id
-                      )
-                    }
-                  />
-                ))}
-              </div>
-
-              {ehAdmin && !souEu && (
-                <button
-                  className="btn sm ghost"
-                  type="button"
-                  style={{ marginTop: 10 }}
-                  onClick={() => mexer(() => definirAdmin(p.id, !p.admin), p.id)}
-                >
-                  {p.admin ? "Tirar de admin" : "Tornar admin"}
-                </button>
               )}
             </div>
           );

@@ -7,6 +7,7 @@ import {
   apiQuadroEmpresa,
 } from "../lib/compartilhado.js";
 import { useAuth } from "../lib/useAuth.js";
+import { usePode } from "../lib/permissoes.js";
 import Quadro, { criarApi } from "../componentes/Quadro.jsx";
 import AvisoAlcance from "../componentes/AvisoAlcance.jsx";
 
@@ -17,6 +18,16 @@ export default function Kanban({ busca }) {
 
   const modo = estado.kanbanModo || "pessoal";
   const marcaId = estado.kanbanMarcaId || "";
+
+  /* Permissoes valem so nos quadros de marca: o pessoal e da pessoa. */
+  const podeFazer = usePode();
+  const podeQuadro = {
+    criar: podeFazer("demandas", "criar"),
+    editar: podeFazer("demandas", "editar"),
+    mover: podeFazer("demandas", "mover"),
+    excluir: podeFazer("demandas", "excluir"),
+    colunas: podeFazer("demandas", "colunas"),
+  };
 
   const marcas = compartilhado.marcas || [];
   const marca = marcas.find((m) => m.id === marcaId) || null;
@@ -89,7 +100,7 @@ export default function Kanban({ busca }) {
               })}
             </select>
 
-            {marca && !quadro && (
+            {marca && !quadro && podeQuadro.colunas && (
               <button
                 className="btn primary sm"
                 type="button"
@@ -139,6 +150,7 @@ export default function Kanban({ busca }) {
             demandas={quadro.demandas}
             api={apiEmpresa}
             busca={busca}
+            pode={podeQuadro}
           />
         </>
       )}

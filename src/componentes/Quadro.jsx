@@ -23,7 +23,13 @@ function TagPrazo({ prazo, concluida }) {
   return null;
 }
 
-function CartaoModal({ tarefa, listas, api, aoFechar }) {
+/* O que o quadro deixa fazer. O pessoal deixa tudo — é da pessoa, e
+   permissão de time não tem o que dizer sobre a lista de tarefas de
+   alguém. Os quadros de marca recebem o que o banco também cobra, para
+   a tela não oferecer botão que sempre dá erro. */
+export const TUDO = { criar: true, editar: true, mover: true, excluir: true, colunas: true };
+
+function CartaoModal({ tarefa, listas, api, aoFechar, pode = TUDO }) {
   const [d, setD] = useState(tarefa);
   const [excluindo, setExcluindo] = useState(false);
 
@@ -35,6 +41,10 @@ function CartaoModal({ tarefa, listas, api, aoFechar }) {
     api.atualizarTarefa(novo);
   }
 
+  /* Quem só pode mover ainda troca a lista pelo seletor — é o mesmo
+     gesto do arraste, em outro lugar. Os outros campos ficam travados. */
+  const soLe = !pode.editar;
+
   return (
     <>
       <Modal
@@ -43,14 +53,16 @@ function CartaoModal({ tarefa, listas, api, aoFechar }) {
         largo
         acoes={
           <>
-            <button
-              className="btn sm ghost danger"
-              type="button"
-              style={{ marginRight: "auto" }}
-              onClick={() => setExcluindo(true)}
-            >
-              Excluir tarefa
-            </button>
+            {pode.excluir && (
+              <button
+                className="btn sm ghost danger"
+                type="button"
+                style={{ marginRight: "auto" }}
+                onClick={() => setExcluindo(true)}
+              >
+                Excluir tarefa
+              </button>
+            )}
             <button className="btn" type="button" onClick={aoFechar}>
               Fechar
             </button>
@@ -63,6 +75,7 @@ function CartaoModal({ tarefa, listas, api, aoFechar }) {
             value={d.titulo}
             placeholder="Título da tarefa"
             style={{ fontSize: "1rem", fontWeight: 700 }}
+              readOnly={soLe}
             onChange={(e) => grava({ titulo: e.target.value })}
           />
         </div>
@@ -73,6 +86,7 @@ function CartaoModal({ tarefa, listas, api, aoFechar }) {
               type="text"
               value={d.solicitante || ""}
               placeholder="Quem pediu"
+              readOnly={soLe}
               onChange={(e) => grava({ solicitante: e.target.value })}
             />
           </div>
@@ -81,12 +95,14 @@ function CartaoModal({ tarefa, listas, api, aoFechar }) {
             <input
               type="date"
               value={d.prazo || ""}
+              readOnly={soLe}
               onChange={(e) => grava({ prazo: e.target.value })}
             />
           </div>
           <div className="field">
             <label>Prioridade</label>
             <select
+              disabled={soLe}
               value={d.prioridade || "normal"}
               onChange={(e) => grava({ prioridade: e.target.value })}
             >
@@ -98,7 +114,11 @@ function CartaoModal({ tarefa, listas, api, aoFechar }) {
         </div>
         <div className="field">
           <label>Lista</label>
-          <select value={d.status} onChange={(e) => grava({ status: e.target.value })}>
+          <select
+            value={d.status}
+            disabled={!pode.mover && !pode.editar}
+            onChange={(e) => grava({ status: e.target.value })}
+          >
             {listas.map((L) => (
               <option key={L.id} value={L.id}>{L.nome}</option>
             ))}
@@ -110,6 +130,7 @@ function CartaoModal({ tarefa, listas, api, aoFechar }) {
             value={d.notas || ""}
             style={{ minHeight: 150 }}
             placeholder="Briefing, links, o que ficou combinado…"
+            readOnly={soLe}
             onChange={(e) => grava({ notas: e.target.value })}
           />
         </div>
@@ -189,7 +210,7 @@ function MenuLista({ lista, listas, api, aoFechar }) {
   );
 }
 
-function Coluna({ lista, listas, tarefas, alvo, pegar, pegarColuna, api, aoAbrir }) {
+function Coluna({ lista, listas, tarefas, alvo, pegar, pegarColuna, api, aoAbrir, pode = TUDO }) {
   const [menuAberto, setMenuAberto] = useState(false);
   const [editandoNome, setEditandoNome] = useState(false);
   const [novoCartao, setNovoCartao] = useState(null);
@@ -212,8 +233,9 @@ function Coluna({ lista, listas, tarefas, alvo, pegar, pegarColuna, api, aoAbrir
       <div
         className="lista-h"
         onClick={() => setMenuAberto(false)}
-        onPointerDown={(e) => pegarColuna(e, lista.id, lista.nome)}
-        title="Arraste pelo cabeçalho para reordenar"
+        onPointerDown={pode.colunas ? (e) => pegarColuna(e, lista.id, lista.nome) : undefined}
+        title={pode.colunas ? "Arraste pelo cabeçalho para reordenar" : ""}
+        style={pode.colunas ? undefined : { cursor: "default" }}
       >
         <span className="dot" style={{ background: lista.cor }} />
         {editandoNome ? (
@@ -232,18 +254,24 @@ function Coluna({ lista, listas, tarefas, alvo, pegar, pegarColuna, api, aoAbrir
             }}
           />
         ) : (
-          <div className="nm" title="Duplo clique para renomear" onDoubleClick={() => setEditandoNome(true)}>
+          <div
+            className="nm"
+            title={pode.colunas ? "Duplo clique para renomear" : ""}
+            onDoubleClick={pode.colunas ? () => setEditandoNome(true) : undefined}
+          >
             {lista.nome}
           </div>
         )}
         <span className="qt">{tarefas.length}</span>
-        <button
-          className="btn sm ghost"
-          type="button"
-          onClick={(e) => { e.stopPropagation(); setMenuAberto((v) => !v); }}
-        >
-          ⋯
-        </button>
+        {pode.colunas && (
+          <button
+            className="btn sm ghost"
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setMenuAberto((v) => !v); }}
+          >
+            ⋯
+          </button>
+        )}
         {menuAberto && (
           <MenuLista lista={lista} listas={listas} api={api} aoFechar={() => setMenuAberto(false)} />
         )}
@@ -257,7 +285,7 @@ function Coluna({ lista, listas, tarefas, alvo, pegar, pegarColuna, api, aoAbrir
               className="cartao"
               data-cartao={d.id}
               style={{ borderLeftColor: lista.cor }}
-              onPointerDown={(e) => pegar(e, d.id, d.titulo)}
+              onPointerDown={pode.mover ? (e) => pegar(e, d.id, d.titulo) : undefined}
               onClick={() => aoAbrir(d)}
             >
               <div className="tx">{d.titulo}</div>
@@ -273,7 +301,7 @@ function Coluna({ lista, listas, tarefas, alvo, pegar, pegarColuna, api, aoAbrir
         ))}
         {antes >= tarefas.length && <div className="placeholder" style={{ height: 34 }} />}
 
-        {novoCartao !== null ? (
+        {!pode.criar ? null : novoCartao !== null ? (
           <div>
             <input
               type="text"
@@ -311,7 +339,7 @@ function Coluna({ lista, listas, tarefas, alvo, pegar, pegarColuna, api, aoAbrir
   );
 }
 
-export default function Quadro({ listas, demandas, api, busca }) {
+export default function Quadro({ listas, demandas, api, busca, pode = TUDO }) {
   const [aberta, setAberta] = useState(null);
   const { pegar, voando, alvo } = useArrastar({ aoSoltar: api.moverTarefa });
   const col = useArrastarColuna({ aoSoltar: api.reordenarLista });
@@ -326,11 +354,13 @@ export default function Quadro({ listas, demandas, api, busca }) {
 
   return (
     <>
-      <div className="chips">
-        <button className="btn sm ghost" type="button" onClick={api.criarLista}>
-          ＋ Adicionar outra lista
-        </button>
-      </div>
+      {pode.colunas && (
+        <div className="chips">
+          <button className="btn sm ghost" type="button" onClick={api.criarLista}>
+            ＋ Adicionar outra lista
+          </button>
+        </div>
+      )}
 
       <div className="board">
         {(() => {
@@ -353,6 +383,7 @@ export default function Quadro({ listas, demandas, api, busca }) {
                 alvo={alvo}
                 pegar={pegar}
                 pegarColuna={col.pegar}
+                pode={pode}
                 api={api}
                 aoAbrir={setAberta}
               />
@@ -379,6 +410,7 @@ export default function Quadro({ listas, demandas, api, busca }) {
       )}
       {aberta && (
         <CartaoModal
+          pode={pode}
           tarefa={aberta}
           listas={listas}
           api={api}
