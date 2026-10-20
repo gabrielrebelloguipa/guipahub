@@ -285,8 +285,10 @@ export async function salvarMarca(m, quem) {
    marcas do cadastro inicial vieram sem descricao completa, que e
    obrigatoria no formulario: sem este atalho, montar a carteira de cada
    pessoa do comercial exigiria escrever 272 descricoes antes. */
-export async function definirResponsavel(id, email) {
-  const responsavel = String(email || "").trim().toLowerCase();
+export async function definirResponsavel(id, nome) {
+  /* Nome como está na lista, sem baixar a caixa: "William", não
+     "william". (Quando isto guardava e-mail, baixar fazia sentido.) */
+  const responsavel = String(nome || "").trim();
   if (!REMOTO) {
     gravarLocal({
       marcas: estado.marcas.map((x) => (x.id === id ? { ...x, responsavel } : x)),
@@ -388,6 +390,8 @@ export async function pessoas() {
 export function nomeDe(email, lista) {
   if (!email) return "";
   if (email === "sistema") return "Sistema";
+  /* Responsável é guardado pelo nome, não pelo e-mail: aí já é o nome. */
+  if (!email.includes("@")) return email;
   const p = (lista || []).find((x) => x.email?.toLowerCase() === email.toLowerCase());
   return (p && p.nome) || email.split("@")[0];
 }

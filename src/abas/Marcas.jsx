@@ -1,4 +1,4 @@
-import { usePode, pode } from "../lib/permissoes.js";
+import { usePode, pode, usePermissoes } from "../lib/permissoes.js";
 import { useEffect, useState } from "react";
 import {
   useCompartilhado,
@@ -17,6 +17,10 @@ import CampoNicho from "../componentes/CampoNicho.jsx";
 import AvisoAlcance from "../componentes/AvisoAlcance.jsx";
 import { fmtData } from "../lib/constantes.js";
 
+function normalizaNome(t) {
+  return String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+}
+
 const VAZIA = {
   nome: "", nicho: "", site: "", resumo: "", descricao: "", logo: "", responsavel: "",
 };
@@ -31,28 +35,23 @@ function useTime() {
   return time;
 }
 
-/* Campo de responsavel: escolhe da lista de quem ja entrou, mas aceita
-   digitar o e-mail de quem ainda nao entrou -- a carteira de alguem
-   pode ser montada antes do primeiro login dessa pessoa. */
-function CampoResponsavel({ id, valor, aoMudar, time }) {
+/* Seletor de responsável: só quem está na lista do comercial
+   (Configurações › Responsáveis). Se a marca tiver um nome que saiu da
+   lista, ele continua aparecendo selecionado — sumir com ele faria a
+   marca parecer sem dono quando na verdade tem. */
+function CampoResponsavel({ id, valor, aoMudar }) {
+  const { responsaveis } = usePermissoes();
+  const opcoes = valor && !responsaveis.includes(valor) ? [...responsaveis, valor] : responsaveis;
   return (
-    <>
-      <input
-        id={id}
-        type="email"
-        list={id + "-time"}
-        value={valor}
-        placeholder="Quem do comercial cuida desta conta"
-        onChange={(e) => aoMudar(e.target.value)}
-      />
-      <datalist id={id + "-time"}>
-        {time.map((p) => (
-          <option key={p.email} value={p.email}>
-            {p.nome || p.email}
-          </option>
-        ))}
-      </datalist>
-    </>
+    <select id={id} className="campo-resp" value={valor || ""} onChange={(e) => aoMudar(e.target.value)}>
+      <option value="">— sem responsável —</option>
+      {opcoes.map((n) => (
+        <option key={n} value={n}>
+          {n}
+          {!responsaveis.includes(n) ? " (fora da lista)" : ""}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -97,7 +96,6 @@ function FormMarca({ inicial, aoFechar }) {
 
   const faltando = validarMarca(m);
   const nichos = nichosConhecidos(compartilhado);
-  const time = useTime();
 
   /* O erro só aparece depois da primeira tentativa de salvar. Marcar tudo
      de vermelho num formulário que a pessoa acabou de abrir é hostil. */
@@ -194,7 +192,6 @@ function FormMarca({ inicial, aoFechar }) {
           id="mc-responsavel"
           valor={m.responsavel || ""}
           aoMudar={(v) => setM({ ...m, responsavel: v })}
-          time={time}
         />
       </div>
 
@@ -283,17 +280,20 @@ function Detalhe({ marca, aoFechar, aoEditar, aoExcluir }) {
   const [salvandoResp, setSalvandoResp] = useState(false);
   const [erroResp, setErroResp] = useState("");
 
-  async function gravarResp() {
-    if (resp.trim().toLowerCase() === (marca.responsavel || "")) return;
-    if (resp.trim() && !/@guipabrasil\.com$/i.test(resp.trim())) {
-      setErroResp("Use um e-mail @guipabrasil.com.");
-      return;
-    }
+  /* Grava ao escolher: com uma lista fechada não há o que digitar e
+     revisar antes, e um botão "Salvar" a mais seria um clique à toa em
+     cada uma das 272 marcas. */
+  async function gravarResp(novo) {
+    const anterior = resp;
+    setResp(novo);
     setSalvandoResp(true);
     setErroResp("");
-    const r = await definirResponsavel(marca.id, resp);
+    const r = await definirResponsavel(marca.id, novo);
     setSalvandoResp(false);
-    if (!r.ok) setErroResp(r.erro);
+    if (!r.ok) {
+      setResp(anterior);
+      setErroResp(r.erro);
+    }
   }
 
   return (
@@ -339,23 +339,11 @@ function Detalhe({ marca, aoFechar, aoEditar, aoExcluir }) {
         <div className="v">
           {podeFazer("marcas", "editar") ? (
             <div className="resp-rapido">
-              <CampoResponsavel
-                id="dt-responsavel"
-                valor={resp}
-                aoMudar={setResp}
-                time={time}
-              />
-              <button
-                className="btn sm"
-                type="button"
-                disabled={salvandoResp || resp.trim().toLowerCase() === (marca.responsavel || "")}
-                onClick={gravarResp}
-              >
-                {salvandoResp ? "salvando…" : "Salvar"}
-              </button>
+              <CampoResponsavel id="dt-responsavel" valor={resp} aoMudar={gravarResp} />
+              {salvandoResp && <span className="sub">salvando…</span>}
             </div>
-          ) : marca.responsavel ? (
-            nomeDe(marca.responsavel, time)
+          ) : resp ? (
+            resp
           ) : (
             <span className="sub">ninguém ainda</span>
           )}
@@ -405,14 +393,20 @@ export default function Marcas({ busca }) {
   const [filtroNicho, setFiltroNicho] = useState("");
   const [carteira, setCarteira] = useState("");
   const auth = useAuth();
-  const time = useTime();
-  const meuEmail = (auth.perfil?.email || "").toLowerCase();
+  const { responsaveis } = usePermissoes();
 
-  /* "minha" e "ninguem" sao atalhos; qualquer outro valor e o e-mail de
-     alguem do time. */
+  /* "Minha carteira" acha a pessoa da lista pelo primeiro nome de quem
+     está logado: Adriano Souza entra como Adriano. Se ninguém da lista
+     tem esse nome, a opção nem aparece — quem não é do comercial não tem
+     carteira. */
+  const primeiroNome = normalizaNome((auth.perfil?.nome || "").split(" ")[0]);
+  const eu = responsaveis.find((n) => normalizaNome(n) === primeiroNome) || "";
+
+  /* "minha" e "ninguem" sao atalhos; qualquer outro valor e o nome de
+     alguem da lista. */
   const naCarteira = (m) =>
     !carteira ? true
-      : carteira === "minha" ? (m.responsavel || "") === meuEmail
+      : carteira === "minha" ? (m.responsavel || "") === eu
       : carteira === "ninguem" ? !m.responsavel
       : (m.responsavel || "") === carteira;
 
@@ -428,9 +422,9 @@ export default function Marcas({ busca }) {
         : true
     );
 
-  const responsaveisEmUso = [
-    ...new Set((compartilhado.marcas || []).map((m) => m.responsavel).filter(Boolean)),
-  ].sort((a, b) => nomeDe(a, time).localeCompare(nomeDe(b, time), "pt-BR"));
+  /* Contagem por pessoa no próprio seletor: "Rafael (34)" já diz como a
+     carteira está distribuída sem precisar filtrar uma por uma. */
+  const contaDe = (n) => (compartilhado.marcas || []).filter((m) => m.responsavel === n).length;
   const semResponsavel = (compartilhado.marcas || []).filter((m) => !m.responsavel).length;
 
   const nichosEmUso = [...new Set((compartilhado.marcas || []).map((m) => m.nicho))]
@@ -452,11 +446,11 @@ export default function Marcas({ busca }) {
           aria-label="Filtrar por carteira"
         >
           <option value="">Todas as carteiras</option>
-          <option value="minha">Minha carteira</option>
+          {eu && <option value="minha">Minha carteira ({contaDe(eu)})</option>}
           <option value="ninguem">Sem responsável ({semResponsavel})</option>
-          {responsaveisEmUso.map((e) => (
-            <option key={e} value={e}>
-              {nomeDe(e, time)}
+          {responsaveis.map((n) => (
+            <option key={n} value={n}>
+              {n} ({contaDe(n)})
             </option>
           ))}
         </select>
@@ -515,7 +509,7 @@ export default function Marcas({ busca }) {
               </div>
               <div className="marca-resumo">{m.resumo}</div>
               <div className="marca-resp">
-                {m.responsavel ? "Conta com " + nomeDe(m.responsavel, time) : "Sem responsável"}
+                {m.responsavel ? "Conta com " + m.responsavel : "Sem responsável"}
               </div>
             </button>
           ))}

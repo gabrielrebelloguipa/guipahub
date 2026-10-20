@@ -92,6 +92,9 @@ const vazio = () => ({
   eu: null,
   abasPadrao: ABAS_PADRAO_INICIAL,
   permissoesPadrao: PERMISSOES_PADRAO_INICIAL,
+  /* Quem do comercial pode ser responsável por uma conta. Lista do
+     banco (10-responsaveis.sql), editável em Configurações. */
+  responsaveis: [],
   drive: { raizId: "", raizNome: "" },
   carregando: temSupabase(),
   erro: "",
@@ -193,6 +196,7 @@ export async function carregar(meuEmail) {
       eu: perfis.find((p) => p.email?.toLowerCase() === String(meuEmail).toLowerCase()) || null,
       abasPadrao: porChave.abas_padrao || ABAS_PADRAO_INICIAL,
       permissoesPadrao: porChave.permissoes_padrao || PERMISSOES_PADRAO_INICIAL,
+      responsaveis: Array.isArray(porChave.responsaveis) ? porChave.responsaveis : [],
       drive: { ...vazio().drive, ...(porChave.drive || {}) },
       carregando: false,
       erro: "",
@@ -236,6 +240,14 @@ export async function salvarPermissoesDe(perfilId, permissoes) {
   if (error) return { ok: false, erro: explicarErro(error) };
   await carregar(estado.eu?.email);
   return { ok: true };
+}
+
+export function salvarResponsaveis(lista, quem) {
+  /* Ordem alfabética e sem repetido: a lista aparece num seletor, e
+     "Rafael" duas vezes seria a mesma pessoa em duas carteiras. */
+  const limpa = [...new Set(lista.map((n) => String(n || "").trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, "pt-BR"));
+  return gravarConfig("responsaveis", limpa, quem);
 }
 
 export function salvarPermissoesPadrao(permissoes, quem) {

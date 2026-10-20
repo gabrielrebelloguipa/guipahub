@@ -914,3 +914,16 @@
   .calc-premissa .calc-in {
     color: var(--text); border-color: var(--border); background: var(--bg); width: 100px;
   }
+
+  /* ---------- responsáveis ---------- */
+  .campo-resp {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 9px; font: inherit; font-size: 0.84rem;
+    min-width: 200px;
+  }
+  .campo-resp:focus { outline: none; border-color: var(--accent); }
+  .chip-x {
+    margin-left: 6px; background: none; border: 0; color: inherit; cursor: pointer;
+    font-size: 0.7rem; opacity: .65; padding: 0 2px;
+  }
+  .chip-x:hover { opacity: 1; }

@@ -8,6 +8,7 @@ import {
   podeNoPerfil,
   salvarPermissoesDe,
   salvarPermissoesPadrao,
+  salvarResponsaveis,
   definirAdmin,
   salvarDrive,
 } from "../lib/permissoes.js";
@@ -235,6 +236,78 @@ function Permissoes({ ehAdmin, meuEmail }) {
   );
 }
 
+/* ---------- responsáveis do comercial ---------- */
+
+/* Quem pode ser escolhido como responsável de uma conta, na aba Marcas.
+   Mora no banco para entrar ou sair alguém do comercial sem deploy.
+   Tirar um nome daqui não apaga a carteira dele: as marcas continuam
+   marcadas com o nome, que aparece como "(fora da lista)". */
+function Responsaveis({ ehAdmin, meuEmail }) {
+  const { responsaveis } = usePermissoes();
+  const [novo, setNovo] = useState("");
+  const [erro, setErro] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  async function gravar(lista) {
+    setSalvando(true);
+    setErro("");
+    const r = await salvarResponsaveis(lista, meuEmail);
+    setSalvando(false);
+    if (!r.ok) setErro(r.erro);
+    return r.ok;
+  }
+
+  async function adicionar() {
+    const n = novo.trim();
+    if (!n) return;
+    if (await gravar([...responsaveis, n])) setNovo("");
+  }
+
+  return (
+    <div className="card">
+      <div className="sub" style={{ marginBottom: 12 }}>
+        Aparecem no seletor de responsável de cada marca. Tirar alguém daqui
+        não apaga a carteira dele: as marcas seguem com o nome, marcado como
+        "fora da lista".
+      </div>
+      {erro && <div className="banner" style={{ borderColor: "var(--danger)" }}>{erro}</div>}
+      <div className="chips">
+        {responsaveis.map((n) => (
+          <span key={n} className="chip on" style={{ cursor: "default" }}>
+            {n}
+            {ehAdmin && (
+              <button
+                type="button"
+                className="chip-x"
+                title={"Tirar " + n + " da lista"}
+                disabled={salvando}
+                onClick={() => gravar(responsaveis.filter((x) => x !== n))}
+              >
+                ✕
+              </button>
+            )}
+          </span>
+        ))}
+        {!responsaveis.length && <span className="sub">Nenhum nome ainda.</span>}
+      </div>
+      {ehAdmin && (
+        <div className="chips" style={{ marginTop: 10 }}>
+          <input
+            className="campo-resp"
+            value={novo}
+            placeholder="Nome de quem entrou no comercial"
+            onChange={(e) => setNovo(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && adicionar()}
+          />
+          <button className="btn sm" type="button" disabled={salvando || !novo.trim()} onClick={adicionar}>
+            Adicionar
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ---------- Drive ---------- */
 
 function ConfigDrive({ ehAdmin, meuEmail }) {
@@ -403,6 +476,10 @@ export default function Configuracoes() {
 
       <Secao titulo="Permissões de usuário" sub="Quem vê o quê, e o padrão de quem entra">
         <Permissoes ehAdmin={ehAdmin} meuEmail={auth.perfil?.email} />
+      </Secao>
+
+      <Secao titulo="Responsáveis do comercial" sub="Quem pode cuidar de uma conta">
+        <Responsaveis ehAdmin={ehAdmin} meuEmail={auth.perfil?.email} />
       </Secao>
 
       <Secao titulo="Drive" sub="De onde a aba Imagens lê o acervo">
