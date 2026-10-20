@@ -245,7 +245,8 @@ function Permissoes({ ehAdmin, meuEmail }) {
    marcadas com o nome, que aparece como "(fora da lista)". */
 function Responsaveis({ ehAdmin, meuEmail }) {
   const { responsaveis } = usePermissoes();
-  const [novo, setNovo] = useState("");
+  const [nome, setNome] = useState("");
+  const [email, setEmail] = useState("");
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
 
@@ -259,48 +260,65 @@ function Responsaveis({ ehAdmin, meuEmail }) {
   }
 
   async function adicionar() {
-    const n = novo.trim();
-    if (!n) return;
-    if (await gravar([...responsaveis, n])) setNovo("");
+    const n = nome.trim();
+    const e = email.trim().toLowerCase();
+    if (!n || !e) return setErro("Preencha nome e e-mail.");
+    if (!/^[^@\s]+@guipabrasil\.com$/.test(e)) return setErro("Use um e-mail @guipabrasil.com.");
+    if (responsaveis.some((r) => r.email === e)) return setErro("Esse e-mail já está na lista.");
+    if (await gravar([...responsaveis, { nome: n, email: e }])) {
+      setNome("");
+      setEmail("");
+    }
   }
 
   return (
     <div className="card">
       <div className="sub" style={{ marginBottom: 12 }}>
-        Aparecem no seletor de responsável de cada marca. Tirar alguém daqui
-        não apaga a carteira dele: as marcas seguem com o nome, marcado como
-        "fora da lista".
+        Aparecem no seletor de responsável de cada marca. A marca guarda o
+        e-mail, e "Minha carteira" reconhece a pessoa pelo login. Tirar alguém
+        daqui não apaga a carteira dele.
       </div>
       {erro && <div className="banner" style={{ borderColor: "var(--danger)" }}>{erro}</div>}
-      <div className="chips">
-        {responsaveis.map((n) => (
-          <span key={n} className="chip on" style={{ cursor: "default" }}>
-            {n}
+      <div className="list">
+        {responsaveis.map((r) => (
+          <div className="row" key={r.email || r.nome} style={{ cursor: "default" }}>
+            <div className="bar" style={{ background: "var(--accent)" }} />
+            <div className="body">
+              <div className="ttl">{r.nome}</div>
+              <div className="meta"><span>{r.email || "sem e-mail"}</span></div>
+            </div>
             {ehAdmin && (
-              <button
-                type="button"
-                className="chip-x"
-                title={"Tirar " + n + " da lista"}
-                disabled={salvando}
-                onClick={() => gravar(responsaveis.filter((x) => x !== n))}
-              >
-                ✕
-              </button>
+              <div className="right">
+                <button
+                  className="btn sm ghost danger"
+                  type="button"
+                  disabled={salvando}
+                  onClick={() => gravar(responsaveis.filter((x) => x !== r))}
+                >
+                  Tirar da lista
+                </button>
+              </div>
             )}
-          </span>
+          </div>
         ))}
-        {!responsaveis.length && <span className="sub">Nenhum nome ainda.</span>}
+        {!responsaveis.length && <div className="empty">Nenhum responsável ainda.</div>}
       </div>
       {ehAdmin && (
-        <div className="chips" style={{ marginTop: 10 }}>
+        <div className="chips" style={{ marginTop: 12 }}>
           <input
             className="campo-resp"
-            value={novo}
-            placeholder="Nome de quem entrou no comercial"
-            onChange={(e) => setNovo(e.target.value)}
+            value={nome}
+            placeholder="Nome completo"
+            onChange={(e) => setNome(e.target.value)}
+          />
+          <input
+            className="campo-resp"
+            value={email}
+            placeholder="nome@guipabrasil.com"
+            onChange={(e) => setEmail(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && adicionar()}
           />
-          <button className="btn sm" type="button" disabled={salvando || !novo.trim()} onClick={adicionar}>
+          <button className="btn sm" type="button" disabled={salvando} onClick={adicionar}>
             Adicionar
           </button>
         </div>

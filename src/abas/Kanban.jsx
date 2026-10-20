@@ -9,7 +9,7 @@ import {
   nomeDe,
 } from "../lib/compartilhado.js";
 import { useAuth } from "../lib/useAuth.js";
-import { usePode } from "../lib/permissoes.js";
+import { usePode, usePermissoes, nomeDoResponsavel } from "../lib/permissoes.js";
 import Quadro, { criarApi } from "../componentes/Quadro.jsx";
 import AvisoAlcance from "../componentes/AvisoAlcance.jsx";
 import EscolheMarca from "../componentes/EscolheMarca.jsx";
@@ -68,6 +68,10 @@ export default function Kanban({ busca }) {
     pessoas().then(setTime);
   }, []);
   const nome = (email) => nomeDe(email, time);
+  /* Responsável vem da lista do comercial, não de quem já entrou: parte
+     do time de vendas ainda não fez login, e apareceria pelo e-mail. */
+  const { responsaveis } = usePermissoes();
+  const nomeResp = (email) => nomeDoResponsavel(email, responsaveis);
 
   const [verHistorico, setVerHistorico] = useState(false);
   useEffect(() => setVerHistorico(false), [quadro?.id]);
@@ -98,7 +102,7 @@ export default function Kanban({ busca }) {
               marcas={marcas}
               valor={marcaId}
               aoEscolher={(id) => alterarPessoal({ kanbanMarcaId: id })}
-              nomeResponsavel={nome}
+              nomeResponsavel={nomeResp}
             />
 
             {marca && !quadro && podeQuadro.colunas && (
@@ -149,7 +153,7 @@ export default function Kanban({ busca }) {
                 {marca.nicho}
                 {" · "}
                 {marca.responsavel ? (
-                  <>Conta com <b>{nome(marca.responsavel)}</b></>
+                  <>Conta com <b>{nomeResp(marca.responsavel)}</b></>
                 ) : (
                   <span className="qt-sem">sem responsável — defina na aba Marcas</span>
                 )}

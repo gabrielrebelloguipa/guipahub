@@ -196,7 +196,7 @@ export async function carregar(meuEmail) {
       eu: perfis.find((p) => p.email?.toLowerCase() === String(meuEmail).toLowerCase()) || null,
       abasPadrao: porChave.abas_padrao || ABAS_PADRAO_INICIAL,
       permissoesPadrao: porChave.permissoes_padrao || PERMISSOES_PADRAO_INICIAL,
-      responsaveis: Array.isArray(porChave.responsaveis) ? porChave.responsaveis : [],
+      responsaveis: lerResponsaveis(porChave.responsaveis),
       drive: { ...vazio().drive, ...(porChave.drive || {}) },
       carregando: false,
       erro: "",
@@ -242,11 +242,39 @@ export async function salvarPermissoesDe(perfilId, permissoes) {
   return { ok: true };
 }
 
+/* Cada responsável é { nome, email }. O 10 guardava só o primeiro nome
+   (string); isto aceita os dois formatos para uma lista antiga não
+   quebrar a tela. */
+function lerResponsaveis(v) {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((x) =>
+      typeof x === "string"
+        ? { nome: x, email: "" }
+        : { nome: String(x?.nome || "").trim(), email: String(x?.email || "").trim().toLowerCase() }
+    )
+    .filter((x) => x.nome);
+}
+
+/* Nome para mostrar a partir do que a marca guarda (o e-mail). Quem saiu
+   da lista continua aparecendo pelo começo do e-mail, para a marca não
+   parecer sem dono. */
+export function nomeDoResponsavel(valor, lista) {
+  if (!valor) return "";
+  const v = String(valor).toLowerCase();
+  const achado = (lista || []).find((r) => r.email && r.email === v);
+  if (achado) return achado.nome;
+  return valor.includes("@") ? valor.split("@")[0] : valor;
+}
+
 export function salvarResponsaveis(lista, quem) {
-  /* Ordem alfabética e sem repetido: a lista aparece num seletor, e
-     "Rafael" duas vezes seria a mesma pessoa em duas carteiras. */
-  const limpa = [...new Set(lista.map((n) => String(n || "").trim()).filter(Boolean))]
-    .sort((a, b) => a.localeCompare(b, "pt-BR"));
+  /* Ordem alfabética e sem e-mail repetido: a lista aparece num seletor,
+     e a mesma pessoa duas vezes viraria duas carteiras. */
+  const vistos = new Set();
+  const limpa = lista
+    .map((r) => ({ nome: String(r.nome || "").trim(), email: String(r.email || "").trim().toLowerCase() }))
+    .filter((r) => r.nome && r.email && !vistos.has(r.email) && vistos.add(r.email))
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
   return gravarConfig("responsaveis", limpa, quem);
 }
 

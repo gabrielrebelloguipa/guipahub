@@ -1,4 +1,4 @@
-import { usePode, pode, usePermissoes } from "../lib/permissoes.js";
+import { usePode, pode, usePermissoes, nomeDoResponsavel } from "../lib/permissoes.js";
 import { useEffect, useState } from "react";
 import {
   useCompartilhado,
@@ -16,10 +16,6 @@ import Modal, { Confirmar } from "../componentes/Modal.jsx";
 import CampoNicho from "../componentes/CampoNicho.jsx";
 import AvisoAlcance from "../componentes/AvisoAlcance.jsx";
 import { fmtData } from "../lib/constantes.js";
-
-function normalizaNome(t) {
-  return String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
-}
 
 const VAZIA = {
   nome: "", nicho: "", site: "", resumo: "", descricao: "", logo: "", responsavel: "",
@@ -41,16 +37,19 @@ function useTime() {
    marca parecer sem dono quando na verdade tem. */
 function CampoResponsavel({ id, valor, aoMudar }) {
   const { responsaveis } = usePermissoes();
-  const opcoes = valor && !responsaveis.includes(valor) ? [...responsaveis, valor] : responsaveis;
+  const v = String(valor || "").toLowerCase();
+  const naLista = responsaveis.some((r) => r.email === v);
   return (
-    <select id={id} className="campo-resp" value={valor || ""} onChange={(e) => aoMudar(e.target.value)}>
+    <select id={id} className="campo-resp" value={v} onChange={(e) => aoMudar(e.target.value)}>
       <option value="">— sem responsável —</option>
-      {opcoes.map((n) => (
-        <option key={n} value={n}>
-          {n}
-          {!responsaveis.includes(n) ? " (fora da lista)" : ""}
+      {responsaveis.map((r) => (
+        <option key={r.email || r.nome} value={r.email}>
+          {r.nome}
         </option>
       ))}
+      {v && !naLista && (
+        <option value={v}>{nomeDoResponsavel(v, responsaveis)} (fora da lista)</option>
+      )}
     </select>
   );
 }
@@ -276,6 +275,7 @@ function Detalhe({ marca, aoFechar, aoEditar, aoExcluir }) {
   const podeFazer = usePode();
   const temQuadro = !!quadroDaMarca(compartilhado, marca.id);
   const time = useTime();
+  const { responsaveis: responsaveisDet } = usePermissoes();
   const [resp, setResp] = useState(marca.responsavel || "");
   const [salvandoResp, setSalvandoResp] = useState(false);
   const [erroResp, setErroResp] = useState("");
@@ -343,7 +343,7 @@ function Detalhe({ marca, aoFechar, aoEditar, aoExcluir }) {
               {salvandoResp && <span className="sub">salvando…</span>}
             </div>
           ) : resp ? (
-            resp
+            nomeDoResponsavel(resp, responsaveisDet)
           ) : (
             <span className="sub">ninguém ainda</span>
           )}
@@ -395,12 +395,10 @@ export default function Marcas({ busca }) {
   const auth = useAuth();
   const { responsaveis } = usePermissoes();
 
-  /* "Minha carteira" acha a pessoa da lista pelo primeiro nome de quem
-     está logado: Adriano Souza entra como Adriano. Se ninguém da lista
-     tem esse nome, a opção nem aparece — quem não é do comercial não tem
-     carteira. */
-  const primeiroNome = normalizaNome((auth.perfil?.nome || "").split(" ")[0]);
-  const eu = responsaveis.find((n) => normalizaNome(n) === primeiroNome) || "";
+  /* "Minha carteira" acha a pessoa pelo e-mail do login. Quem não está na
+     lista do comercial não tem carteira, e a opção nem aparece. */
+  const meuEmail = (auth.perfil?.email || "").toLowerCase();
+  const eu = responsaveis.some((r) => r.email === meuEmail) ? meuEmail : "";
 
   /* "minha" e "ninguem" sao atalhos; qualquer outro valor e o nome de
      alguem da lista. */
@@ -448,9 +446,9 @@ export default function Marcas({ busca }) {
           <option value="">Todas as carteiras</option>
           {eu && <option value="minha">Minha carteira ({contaDe(eu)})</option>}
           <option value="ninguem">Sem responsável ({semResponsavel})</option>
-          {responsaveis.map((n) => (
-            <option key={n} value={n}>
-              {n} ({contaDe(n)})
+          {responsaveis.map((r) => (
+            <option key={r.email || r.nome} value={r.email}>
+              {r.nome} ({contaDe(r.email)})
             </option>
           ))}
         </select>
@@ -509,7 +507,7 @@ export default function Marcas({ busca }) {
               </div>
               <div className="marca-resumo">{m.resumo}</div>
               <div className="marca-resp">
-                {m.responsavel ? "Conta com " + m.responsavel : "Sem responsável"}
+                {m.responsavel ? "Conta com " + nomeDoResponsavel(m.responsavel, responsaveis) : "Sem responsável"}
               </div>
             </button>
           ))}
