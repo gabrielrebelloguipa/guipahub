@@ -101,7 +101,39 @@ as $$
 $$;
 
 -- ---------------------------------------------------------------
--- 4. As políticas
+-- 4. Fora as antigas, que liberavam tudo
+-- ---------------------------------------------------------------
+--
+-- ⚠ A ARMADILHA, porque ela quase passou.
+--
+-- O schema.sql criou `guipa_escreve` (ALL) e `guipa_le` (SELECT) em
+-- cada tabela compartilhada: qualquer pessoa da GUIPA fazia qualquer
+-- coisa. Na primeira versão deste arquivo eu tentei removê-las com
+-- nomes que INVENTEI (marcas_tudo, cartoes_tudo). Os drops não casaram
+-- com nada e falharam em silêncio, porque `if exists` não reclama.
+--
+-- O resultado seria pior que não ter feito nada: políticas permissivas
+-- no Postgres se somam com OU. Com `guipa_escreve` viva ao lado das
+-- novas, QUALQUER restrição é anulada — a tela esconderia o botão e o
+-- banco continuaria aceitando. Teatro de permissão.
+--
+-- Por isso os nomes abaixo são os reais, conferidos em pg_policies, e
+-- a conferência no fim deste arquivo falha de propósito se sobrar
+-- alguma política ALL permissiva.
+
+drop policy if exists guipa_escreve on public.marcas;
+drop policy if exists guipa_le      on public.marcas;
+drop policy if exists guipa_escreve on public.cartoes;
+drop policy if exists guipa_le      on public.cartoes;
+drop policy if exists guipa_escreve on public.listas;
+drop policy if exists guipa_le      on public.listas;
+drop policy if exists guipa_escreve on public.quadros;
+drop policy if exists guipa_le      on public.quadros;
+drop policy if exists guipa_escreve on public.biblioteca_prompts;
+drop policy if exists guipa_le      on public.biblioteca_prompts;
+
+-- ---------------------------------------------------------------
+-- 5. As políticas
 -- ---------------------------------------------------------------
 --
 -- Substituem as de schema.sql, que liberavam tudo para quem fosse da
@@ -188,7 +220,7 @@ create policy biblioteca_exclui  on public.biblioteca_prompts for delete
   using (public.pode_ou_admin('prompts','excluir'));
 
 -- ---------------------------------------------------------------
--- 5. Ninguém edita a própria permissão
+-- 6. Ninguém edita a própria permissão
 -- ---------------------------------------------------------------
 --
 -- A regra que já existia para `admin` e `abas` passa a cobrir
@@ -210,8 +242,19 @@ create policy perfis_toca_no_proprio on public.perfis
 -- Conferência
 -- ---------------------------------------------------------------
 
-select 'padrao' as item, valor::text as valor
-  from public.config_app where chave = 'permissoes_padrao'
+-- Esta consulta existe para FALHAR se a armadilha voltar. Qualquer
+-- política ALL permissiva numa tabela compartilhada anula as regras por
+-- ação, então ver zero aqui é o único resultado aceitável.
+select 'politicas ALL que anulariam tudo' as item,
+       coalesce(string_agg(tablename || '.' || policyname, ', '), 'nenhuma') as valor
+  from pg_policies
+ where schemaname = 'public'
+   and cmd = 'ALL' and permissive = 'PERMISSIVE'
+   and tablename in ('marcas','cartoes','listas','quadros','biblioteca_prompts')
+   and policyname not in ('listas_escreve','quadros_escreve')
 union all
 select 'pessoas com permissao propria',
-       count(*)::text from public.perfis where permissoes is not null;
+       count(*)::text from public.perfis where permissoes is not null
+union all
+select 'padrao', (select valor::text from public.config_app
+                   where chave = 'permissoes_padrao');
