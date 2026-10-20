@@ -351,7 +351,40 @@ function deEvento(e) {
     id: e.id, tipo: e.tipo, cartaoId: e.cartao_id, titulo: e.cartao_titulo,
     de: e.de_lista, para: e.para_lista, texto: e.texto,
     autor: e.autor, autorNome: e.autor_nome || e.autor, em: e.criado_em,
+    editadoEm: e.editado_em || null,
   };
+}
+
+/* Editar e excluir comentario. O banco confere quem pode (11): editar
+   so o proprio, excluir o proprio ou, sendo admin, qualquer um. A versao
+   anterior vai para a auditoria pelo gatilho, nao por aqui. */
+export async function editarComentario(id, texto) {
+  const t = String(texto || "").trim();
+  if (!t) return { ok: false, erro: "Comentario vazio. Para apagar, use Excluir." };
+  const { data, error } = await supabase
+    .from("cartoes_eventos").update({ texto: t }).eq("id", id).select("id");
+  if (error) return { ok: false, erro: explicarErro(error) };
+  /* Sem erro e sem linha devolvida = a politica barrou em silencio
+     (comentario de outra pessoa). Dizer isso, em vez de fingir que foi. */
+  if (!data || !data.length) return { ok: false, erro: "Só quem escreveu pode editar este comentário." };
+  return { ok: true };
+}
+
+export async function excluirComentario(id) {
+  const { data, error } = await supabase
+    .from("cartoes_eventos").delete().eq("id", id).select("id");
+  if (error) return { ok: false, erro: explicarErro(error) };
+  if (!data || !data.length) return { ok: false, erro: "Só quem escreveu, ou um admin, pode excluir este comentário." };
+  return { ok: true };
+}
+
+/* Toda versao de todo comentario -- criado, editado, excluido. So admin
+   le (a politica devolve vazio para os outros). */
+export async function auditoriaComentarios(limite = 300) {
+  const { data, error } = await supabase
+    .from("auditoria_comentarios").select("*").order("em", { ascending: false }).limit(limite);
+  if (error) return { ok: false, erro: explicarErro(error), linhas: [] };
+  return { ok: true, linhas: data || [] };
 }
 
 /* O autor vai preenchido, mas o banco confere: a politica so aceita

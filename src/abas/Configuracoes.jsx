@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "../lib/useAuth.js";
 import {
   usePermissoes,
@@ -13,6 +13,7 @@ import {
   salvarDrive,
 } from "../lib/permissoes.js";
 import { buscarPastas } from "../lib/drive.js";
+import { auditoriaComentarios } from "../lib/compartilhado.js";
 
 /* ---------- permissões ---------- */
 
@@ -308,6 +309,114 @@ function Responsaveis({ ehAdmin, meuEmail }) {
   );
 }
 
+/* ---------- auditoria de comentários ---------- */
+
+/* Toda versão de todo comentário dos quadros de marca: o que foi
+   escrito, cada edição com o antes e o depois, e o texto do que foi
+   excluído. Quem grava é o banco (11), e só admin lê — no Kanban o
+   comentário pode ser editado e apagado livremente porque o registro
+   de verdade mora aqui. */
+const ROTULO_ACAO_AUD = { criou: "comentou", editou: "editou", excluiu: "excluiu" };
+
+function quandoAud(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return (
+    d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" }) +
+    " " +
+    d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+  );
+}
+
+function Auditoria() {
+  const [linhas, setLinhas] = useState(null);
+  const [erro, setErro] = useState("");
+  const [filtro, setFiltro] = useState("");
+  const [so, setSo] = useState(""); // "" | "editou" | "excluiu"
+
+  async function ler() {
+    const r = await auditoriaComentarios();
+    if (r.ok) setLinhas(r.linhas);
+    else setErro(r.erro);
+  }
+
+  /* Lê uma vez ao abrir. Ler no corpo do componente pediria a auditoria
+     de novo a cada redesenho. */
+  useEffect(() => {
+    ler();
+  }, []);
+
+  if (linhas === null && !erro) return <div className="empty">Lendo a auditoria…</div>;
+  if (erro) return <div className="banner" style={{ borderColor: "var(--danger)" }}>{erro}</div>;
+
+  const t = filtro.trim().toLowerCase();
+  const vis = linhas
+    .filter((l) => (so ? l.acao === so : true))
+    .filter((l) =>
+      !t
+        ? true
+        : [l.marca_nome, l.cartao_titulo, l.autor_comentario, l.feito_por, l.feito_por_nome, l.texto_antes, l.texto_depois]
+            .join(" ").toLowerCase().includes(t)
+    );
+
+  return (
+    <div className="card">
+      <div className="chips">
+        <input
+          className="campo-resp"
+          value={filtro}
+          placeholder="Filtrar por marca, cartão, pessoa ou texto"
+          onChange={(e) => setFiltro(e.target.value)}
+          style={{ flex: "1 1 260px" }}
+        />
+        {[["", "Tudo"], ["editou", "Só edições"], ["excluiu", "Só exclusões"]].map(([k, rot]) => (
+          <button key={k} type="button" className={"chip" + (so === k ? " on" : "")} onClick={() => setSo(k)}>
+            {rot}
+          </button>
+        ))}
+        <button className="btn sm ghost" type="button" onClick={() => { setLinhas(null); ler(); }}>
+          Atualizar
+        </button>
+      </div>
+
+      {!vis.length ? (
+        <div className="empty">
+          {linhas.length ? "Nada com esse filtro." : "Nenhum comentário registrado ainda."}
+        </div>
+      ) : (
+        <ul className="aud-lista">
+          {vis.map((l) => (
+            <li key={l.id} className={"aud-item aud-" + l.acao}>
+              <div className="aud-topo">
+                <b>{l.feito_por_nome || l.feito_por || "Alguém"}</b> {ROTULO_ACAO_AUD[l.acao] || l.acao}
+                {l.acao !== "criou" && l.feito_por !== l.autor_comentario && (
+                  <> o comentário de <b>{l.autor_comentario}</b></>
+                )}
+                {" em "}
+                <i>“{l.cartao_titulo}”</i>
+                {l.marca_nome ? <> · {l.marca_nome}</> : null}
+                <span className="aud-quando">{quandoAud(l.em)}</span>
+              </div>
+              {l.texto_antes && (
+                <div className="aud-texto antes">
+                  <span>{l.acao === "excluiu" ? "texto excluído" : "antes"}</span>
+                  {l.texto_antes}
+                </div>
+              )}
+              {l.texto_depois && (
+                <div className="aud-texto depois">
+                  <span>{l.acao === "criou" ? "texto" : "depois"}</span>
+                  {l.texto_depois}
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 /* ---------- Drive ---------- */
 
 function ConfigDrive({ ehAdmin, meuEmail }) {
@@ -481,6 +590,12 @@ export default function Configuracoes() {
       <Secao titulo="Responsáveis do comercial" sub="Quem pode cuidar de uma conta">
         <Responsaveis ehAdmin={ehAdmin} meuEmail={auth.perfil?.email} />
       </Secao>
+
+      {ehAdmin && (
+        <Secao titulo="Auditoria de comentários" sub="Toda versão de todo comentário — só admin vê">
+          <Auditoria />
+        </Secao>
+      )}
 
       <Secao titulo="Drive" sub="De onde a aba Imagens lê o acervo">
         <ConfigDrive ehAdmin={ehAdmin} meuEmail={auth.perfil?.email} />

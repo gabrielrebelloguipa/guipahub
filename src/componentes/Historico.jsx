@@ -4,7 +4,10 @@ import {
   historicoDoQuadro,
   ouvirHistorico,
   comentar,
+  editarComentario,
+  excluirComentario,
 } from "../lib/compartilhado.js";
+import { usePermissoes } from "../lib/permissoes.js";
 
 /* Data e hora no jeito que se fala: "hoje 14:32", "ontem 09:10",
    "12/10 16:45". Histórico é lido para responder "quando foi isso?", e
@@ -45,7 +48,40 @@ function Frase({ e, comTitulo }) {
 
 const ICONE = { criou: "＋", moveu: "→", editou: "✎", comentou: "❝", excluiu: "✕" };
 
-function Linha({ e, comTitulo }) {
+/* Comentário pode ser editado e excluído por quem escreveu; admin
+   exclui qualquer um, mas não edita a fala de outra pessoa. Toda versão
+   fica na auditoria (Configurações), que só admin lê — então aqui não há
+   "tem certeza?" pesando a mão: apagar não some com nada de verdade. */
+function Linha({ e, comTitulo, meuEmail, souAdmin, aoMudar }) {
+  const [editando, setEditando] = useState(false);
+  const [texto, setTexto] = useState(e.texto);
+  const [erro, setErro] = useState("");
+  const [ocupado, setOcupado] = useState(false);
+
+  const ehComentario = e.tipo === "comentou";
+  const meu = ehComentario && meuEmail && e.autor?.toLowerCase() === meuEmail.toLowerCase();
+  const podeEditar = meu;
+  const podeExcluir = ehComentario && (meu || souAdmin);
+
+  async function salvar() {
+    if (texto.trim() === e.texto) return setEditando(false);
+    setOcupado(true);
+    const r = await editarComentario(e.id, texto);
+    setOcupado(false);
+    if (!r.ok) return setErro(r.erro);
+    setEditando(false);
+    setErro("");
+    aoMudar && aoMudar();
+  }
+
+  async function excluir() {
+    setOcupado(true);
+    const r = await excluirComentario(e.id);
+    setOcupado(false);
+    if (!r.ok) return setErro(r.erro);
+    aoMudar && aoMudar();
+  }
+
   return (
     <li className={"hist-item hist-" + e.tipo}>
       <span className="hist-ico">{ICONE[e.tipo] || "•"}</span>
@@ -53,8 +89,45 @@ function Linha({ e, comTitulo }) {
         <div className="hist-frase">
           <Frase e={e} comTitulo={comTitulo} />
         </div>
-        {e.tipo === "comentou" && <div className="hist-comentario">{e.texto}</div>}
-        <div className="hist-quando">{quando(e.em)}</div>
+        {ehComentario &&
+          (editando ? (
+            <div className="hist-novo" style={{ marginTop: 4, marginBottom: 0 }}>
+              <textarea
+                value={texto}
+                autoFocus
+                onChange={(ev) => setTexto(ev.target.value)}
+                onKeyDown={(ev) => {
+                  if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) salvar();
+                  if (ev.key === "Escape") { setTexto(e.texto); setEditando(false); }
+                }}
+              />
+              <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                <button className="btn sm ghost" type="button" onClick={() => { setTexto(e.texto); setEditando(false); }}>
+                  Cancelar
+                </button>
+                <button className="btn sm primary" type="button" disabled={ocupado || !texto.trim()} onClick={salvar}>
+                  {ocupado ? "salvando…" : "Salvar"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="hist-comentario">{e.texto}</div>
+          ))}
+        <div className="hist-quando">
+          {quando(e.em)}
+          {e.editadoEm && <span title={"editado " + quando(e.editadoEm)}> · editado</span>}
+          {!editando && podeEditar && (
+            <button className="hist-acao" type="button" onClick={() => setEditando(true)}>
+              Editar
+            </button>
+          )}
+          {!editando && podeExcluir && (
+            <button className="hist-acao perigo" type="button" disabled={ocupado} onClick={excluir}>
+              Excluir
+            </button>
+          )}
+        </div>
+        {erro && <div className="msg-erro">{erro}</div>}
       </div>
     </li>
   );
@@ -63,6 +136,7 @@ function Linha({ e, comTitulo }) {
 /* ---------- histórico de um cartão, com caixa de comentário ---------- */
 
 export function HistoricoCartao({ quadroId, cartao, podeComentar, perfil }) {
+  const { eu } = usePermissoes();
   const [eventos, setEventos] = useState(null);
   const [erro, setErro] = useState("");
   const [texto, setTexto] = useState("");
@@ -142,7 +216,13 @@ export function HistoricoCartao({ quadroId, cartao, podeComentar, perfil }) {
            aconteceu por último, não reler desde o começo. */
         <ul className="hist-lista">
           {[...eventos].reverse().map((e) => (
-            <Linha key={e.id} e={e} />
+            <Linha
+              key={e.id}
+              e={e}
+              meuEmail={perfil?.email}
+              souAdmin={!!eu?.admin}
+              aoMudar={() => historicoDoCartao(cartao.id).then((h) => h.ok && setEventos(h.eventos))}
+            />
           ))}
         </ul>
       )}

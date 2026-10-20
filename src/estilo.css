@@ -927,3 +927,32 @@
     font-size: 0.7rem; opacity: .65; padding: 0 2px;
   }
   .chip-x:hover { opacity: 1; }
+
+  /* ---------- comentário editável e auditoria ---------- */
+  .hist-acao {
+    margin-left: 8px; background: none; border: 0; padding: 0; cursor: pointer;
+    font: inherit; font-size: 0.72rem; color: var(--muted); text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .hist-acao:hover { color: var(--text); }
+  .hist-acao.perigo:hover { color: var(--danger); }
+
+  .aud-lista { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .aud-item {
+    border: 1px solid var(--border); border-left: 3px solid var(--border);
+    border-radius: 8px; padding: 9px 12px; background: var(--bg);
+  }
+  .aud-editou { border-left-color: var(--accent); }
+  .aud-excluiu { border-left-color: var(--danger); }
+  .aud-topo { font-size: 0.84rem; color: var(--text-dim, var(--text)); line-height: 1.45; }
+  .aud-topo b { color: var(--text); }
+  .aud-quando { float: right; font-size: 0.72rem; color: var(--muted); margin-left: 10px; }
+  .aud-texto {
+    margin-top: 6px; padding: 6px 9px; border-radius: 6px; font-size: 0.84rem;
+    white-space: pre-wrap; word-break: break-word; color: var(--text); background: var(--surface-2);
+  }
+  .aud-texto span {
+    display: block; font-size: 0.66rem; font-weight: 700; letter-spacing: .05em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 2px;
+  }
+  .aud-texto.antes { text-decoration-color: var(--danger); }
