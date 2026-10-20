@@ -6,7 +6,7 @@
    componentes por useSyncExternalStore, e recarga por tempo real. */
 
 import { useSyncExternalStore } from "react";
-import { supabase, temSupabase, explicarErro } from "./supabase.js";
+import { supabase, temSupabase, explicarErro, todas } from "./supabase.js";
 
 const BUCKET = "central";
 /* Link assinado vence em uma hora; pede de novo com folga antes. */
@@ -38,10 +38,13 @@ async function carregar() {
     definir({ carregando: false, erro: "Supabase não configurado." });
     return;
   }
+  /* Paginado como o resto (ver todas() em supabase.js): a Central não
+     deve passar de mil itens tão cedo, mas no dia em que passar, cortar
+     em silêncio seria o mesmo bug que sumiu com a coluna Concluído. */
   const [rm, rg, ri] = await Promise.all([
-    supabase.from("central_materiais").select("*").order("nome"),
-    supabase.from("central_guias").select("*").order("titulo"),
-    supabase.from("central_imagens").select("*").order("criado_em", { ascending: false }),
+    todas(() => supabase.from("central_materiais").select("*").order("nome").order("id")),
+    todas(() => supabase.from("central_guias").select("*").order("titulo").order("id")),
+    todas(() => supabase.from("central_imagens").select("*").order("criado_em", { ascending: false }).order("id")),
   ]);
   const err = rm.error || rg.error || ri.error;
   if (err) {

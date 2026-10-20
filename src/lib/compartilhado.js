@@ -15,7 +15,7 @@
    toda a cada arraste. */
 
 import { useSyncExternalStore } from "react";
-import { supabase, temSupabase, explicarErro } from "./supabase.js";
+import { supabase, temSupabase, explicarErro, todas } from "./supabase.js";
 
 const CHAVE = "guipahub_compartilhado_v1";
 
@@ -119,12 +119,14 @@ function gravarLocal(patch) {
 async function carregarRemoto() {
   definir({ carregando: true, erro: "" });
   try {
+    /* A ordem por id no fim de cada consulta é o desempate: paginar sem
+       ordem estável pode repetir uma linha numa página e pular outra. */
     const [rm, rb, rq, rl, rc] = await Promise.all([
-      supabase.from("marcas").select("*").order("nome"),
-      supabase.from("biblioteca_prompts").select("*").order("criado_em", { ascending: false }),
-      supabase.from("quadros").select("*"),
-      supabase.from("listas").select("*").order("ordem"),
-      supabase.from("cartoes").select("*").order("ordem"),
+      todas(() => supabase.from("marcas").select("*").order("nome").order("id")),
+      todas(() => supabase.from("biblioteca_prompts").select("*").order("criado_em", { ascending: false }).order("id")),
+      todas(() => supabase.from("quadros").select("*").order("id")),
+      todas(() => supabase.from("listas").select("*").order("ordem").order("id")),
+      todas(() => supabase.from("cartoes").select("*").order("ordem").order("id")),
     ]);
     const primeiro = [rm, rb, rq, rl, rc].find((r) => r.error);
     if (primeiro) throw primeiro.error;

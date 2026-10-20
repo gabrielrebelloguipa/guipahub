@@ -53,3 +53,24 @@ export function explicarErro(e) {
   }
   return msg;
 }
+
+/* O Supabase devolve no máximo 1000 linhas por consulta — é um teto do
+   SERVIDOR, então pedir .range(0, 4999) ainda volta mil — e corta o resto
+   sem avisar. Com 272 quadros de 5 colunas são 1360 colunas: as primeiras
+   mil, ordenadas por posição, cobriam Pendentes, Em andamento e Em
+   validação de todos os quadros, On hold de parte e Concluído de NENHUM.
+
+   Toda tabela que pode passar de mil linhas é lida por aqui, página por
+   página, até a última vir incompleta. `montar` precisa devolver uma
+   consulta com ordem estável (terminar em .order("id")): sem isso uma
+   linha pode se repetir numa página e outra sumir entre duas. */
+const PAGINA_BANCO = 1000;
+export async function todas(montar) {
+  const linhas = [];
+  for (let de = 0; ; de += PAGINA_BANCO) {
+    const { data, error } = await montar().range(de, de + PAGINA_BANCO - 1);
+    if (error) return { data: null, error };
+    linhas.push(...(data || []));
+    if (!data || data.length < PAGINA_BANCO) return { data: linhas, error: null };
+  }
+}
