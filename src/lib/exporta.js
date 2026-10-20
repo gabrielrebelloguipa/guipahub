@@ -248,15 +248,24 @@ function folhaEspeciais(wb, cab, entrada, P) {
 
 /* ---------- as duas saídas ---------- */
 
-export async function exportarXlsx({ modo, cab, pracas, especiais, premissas }) {
-  const { default: ExcelJS } = await import("exceljs");
+/* Separado do download para poder ser testado fora do navegador: o
+   teste monta a planilha, relê o arquivo gerado e confere fórmula por
+   fórmula, sem precisar baixar nada. */
+export async function montarPlanilha({ modo, cab, pracas, especiais, premissas }) {
+  const mod = await import("exceljs");
+  const ExcelJS = mod.default || mod;
   const wb = new ExcelJS.Workbook();
   wb.creator = cab.atendimento || "GuipaHub";
   wb.created = new Date();
   const P = { ...PREMISSAS_PADRAO, ...(premissas || {}) };
   if (modo === "circuito") folhaCircuito(wb, cab, pracas, P);
   else folhaEspeciais(wb, cab, especiais, P);
-  const buf = await wb.xlsx.writeBuffer();
+  return wb.xlsx.writeBuffer();
+}
+
+export async function exportarXlsx(dados) {
+  const { modo, cab } = dados;
+  const buf = await montarPlanilha(dados);
   baixar(
     new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
     nomeArquivo(cab, modo, "xlsx")
