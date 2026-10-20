@@ -31,16 +31,61 @@ export const ABAS = [
 
 export const TODAS_AS_CHAVES = ABAS.map((a) => a.key);
 
+/* ---------- permissões por ação ---------- */
+
+/* O catálogo precisa casar com o 06-permissoes.sql: a tela esconde a
+   partir daqui, o banco recusa a partir de lá. Divergir faz aparecer
+   botão que sempre dá erro, ou sumir botão que funcionaria. */
+export const AREAS = [
+  { key: "hoje", label: "Hoje", acoes: ["ver"] },
+  {
+    key: "demandas",
+    label: "Kanban",
+    acoes: ["ver", "criar", "editar", "mover", "excluir", "colunas"],
+  },
+  { key: "central", label: "Central Guipa", acoes: ["ver", "criar", "editar", "excluir"] },
+  { key: "marcas", label: "Marcas", acoes: ["ver", "criar", "editar", "excluir"] },
+  { key: "clientes", label: "Imagens", acoes: ["ver", "baixar"] },
+  { key: "prompts", label: "Prompts", acoes: ["ver", "publicar", "editar", "excluir"] },
+];
+
+export const ROTULO_ACAO = {
+  ver: "Ver a aba",
+  criar: "Criar",
+  editar: "Editar",
+  mover: "Mover",
+  excluir: "Excluir",
+  colunas: "Criar e excluir colunas",
+  baixar: "Baixar e copiar",
+  publicar: "Publicar na biblioteca",
+};
+
+/* Para o banco, mover e editar um cartão são o mesmo UPDATE — ele não
+   sabe que trocar de coluna é "mover". A separação existe só na tela, e
+   isto está escrito aqui para ninguém prometer na interface uma divisão
+   que o banco não sustenta. */
+export const ACOES_SEM_TRANCA = { demandas: ["mover"] };
+
 /* Mesmo conjunto que o 04-pendentes.sql grava no banco. O valor do
    banco manda; este aqui so aparece no piscar antes da resposta, e
    discordar dele faria a sidebar trocar de tamanho na frente da
    pessoa. Marcas e Prompts ficam de fora ate estarem prontas. */
 const ABAS_PADRAO_INICIAL = ["hoje", "demandas", "central", "clientes"];
 
+const PERMISSOES_PADRAO_INICIAL = {
+  hoje: { ver: true },
+  demandas: { ver: true, criar: true, editar: true, mover: true, excluir: false, colunas: false },
+  central: { ver: true, criar: false, editar: false, excluir: false },
+  marcas: { ver: false, criar: false, editar: false, excluir: false },
+  clientes: { ver: true, baixar: true },
+  prompts: { ver: false, publicar: false, editar: false, excluir: false },
+};
+
 const vazio = () => ({
   perfis: [],
   eu: null,
   abasPadrao: ABAS_PADRAO_INICIAL,
+  permissoesPadrao: PERMISSOES_PADRAO_INICIAL,
   drive: { raizId: "", raizNome: "" },
   carregando: temSupabase(),
   erro: "",
@@ -68,13 +113,48 @@ export function souAdmin() {
   return !!estado.eu?.admin;
 }
 
-/* As abas de quem está logado. `abas` null quer dizer "nunca foi
-   personalizado", e aí vale o padrão global — é o que faz mudar o padrão
-   valer para todo mundo que não tem exceção. */
-export function abasDe(perfil, abasPadrao) {
+/* A resposta para "fulano pode X em Y?".
+
+   Ordem: exceção da pessoa > padrão global > false. O false no fim é de
+   propósito — ação que ninguém configurou é negada. Um sistema de
+   permissão que erra para o lado do "sim" não é sistema de permissão.
+
+   Admin passa por cima: sem isso, um admin que se recortasse sem querer
+   não teria como desfazer. Mesma regra do `pode_ou_admin` no banco. */
+export function podeNoPerfil(perfil, padrao, area, acao) {
+  if (perfil?.admin) return true;
+  const minha = perfil?.permissoes?.[area]?.[acao];
+  if (typeof minha === "boolean") return minha;
+  const geral = padrao?.[area]?.[acao];
+  return typeof geral === "boolean" ? geral : false;
+}
+
+/* O mesmo, para quem está logado agora. É isto que os componentes
+   chamam. */
+export function pode(area, acao) {
+  return podeNoPerfil(estado.eu, estado.permissoesPadrao, area, acao);
+}
+
+/* Gancho para a tela redesenhar quando a permissão mudar em tempo real
+   — admin tirando um direito tem que sumir o botão sem recarregar. */
+export function usePode() {
+  const { eu, permissoesPadrao } = usePermissoes();
+  return (area, acao) => podeNoPerfil(eu, permissoesPadrao, area, acao);
+}
+
+/* As abas visíveis deixam de ser uma lista própria: aba visível é aba
+   em que a pessoa pode "ver". Duas fontes para a mesma pergunta davam
+   respostas diferentes — a sidebar mostrava Marcas e a tela recusava.
+
+   `abas` (a coluna antiga) ainda é respeitada para quem nunca foi
+   migrado, senão ligar o sistema novo zeraria o ajuste já feito. */
+export function abasDe(perfil, abasPadrao, permissoesPadrao) {
+  if (perfil?.permissoes || permissoesPadrao) {
+    return TODAS_AS_CHAVES.filter((k) =>
+      podeNoPerfil(perfil, permissoesPadrao, k, "ver")
+    );
+  }
   const lista = perfil?.abas ?? abasPadrao ?? TODAS_AS_CHAVES;
-  /* Filtra chave que não existe mais: aba removida do código não pode
-     quebrar a sidebar de quem a tinha marcada. */
   return TODAS_AS_CHAVES.filter((k) => lista.includes(k));
 }
 
@@ -106,6 +186,7 @@ export async function carregar(meuEmail) {
       perfis,
       eu: perfis.find((p) => p.email?.toLowerCase() === String(meuEmail).toLowerCase()) || null,
       abasPadrao: porChave.abas_padrao || ABAS_PADRAO_INICIAL,
+      permissoesPadrao: porChave.permissoes_padrao || PERMISSOES_PADRAO_INICIAL,
       drive: { ...vazio().drive, ...(porChave.drive || {}) },
       carregando: false,
       erro: "",
@@ -139,6 +220,20 @@ export async function salvarAbasDe(perfilId, abas) {
   if (error) return { ok: false, erro: explicarErro(error) };
   await carregar(estado.eu?.email);
   return { ok: true };
+}
+
+export async function salvarPermissoesDe(perfilId, permissoes) {
+  const { error } = await supabase
+    .from("perfis")
+    .update({ permissoes })
+    .eq("id", perfilId);
+  if (error) return { ok: false, erro: explicarErro(error) };
+  await carregar(estado.eu?.email);
+  return { ok: true };
+}
+
+export function salvarPermissoesPadrao(permissoes, quem) {
+  return gravarConfig("permissoes_padrao", permissoes, quem);
 }
 
 export async function definirAdmin(perfilId, admin) {

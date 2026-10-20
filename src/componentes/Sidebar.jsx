@@ -11,12 +11,12 @@ export const ABA_CONFIG = { key: "config", label: "Configurações", ico: "⚙" 
 export default function Sidebar({ secao, aoTrocar }) {
   const estado = useEstado();
   const compartilhado = useCompartilhado();
-  const { eu, abasPadrao } = usePermissoes();
+  const { eu, abasPadrao, permissoesPadrao } = usePermissoes();
 
   /* Configurações só aparece para admin. Não é tranca — é tirar da
      frente de quem não tem o que fazer ali; o banco recusa a escrita
      de quem não é admin de qualquer jeito. */
-  const visiveis = abasDe(eu, abasPadrao);
+  const visiveis = abasDe(eu, abasPadrao, permissoesPadrao);
   const lista = SECOES.filter((s) => visiveis.includes(s.key));
   if (eu?.admin) lista.push(ABA_CONFIG);
 
