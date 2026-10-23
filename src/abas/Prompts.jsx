@@ -19,7 +19,7 @@ import {
 import { CATEGORIAS_PROMPT, categoriaPrompt, FERRAMENTAS_IA } from "../lib/constantes.js";
 import Modal, { Confirmar } from "../componentes/Modal.jsx";
 
-function FormPrompt({ inicial, aoFechar }) {
+function FormPrompt({ inicial, aoFechar, aoEnviar, podePublicar }) {
   const auth = useAuth();
   const novo = !inicial;
   const [p, setP] = useState(
@@ -28,6 +28,14 @@ function FormPrompt({ inicial, aoFechar }) {
   const [tagsTexto, setTagsTexto] = useState((inicial?.tags || []).join(", "));
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
+
+  const [publicado, setPublicado] = useState(false);
+
+  async function publicar() {
+    const r = await publicarPrompt(p, p.criadoPor || auth.perfil?.email || "");
+    if (!r.ok) return setErro(r.erro);
+    setPublicado(true);
+  }
 
   async function salvar() {
     if (!p.titulo.trim()) return;
@@ -48,6 +56,22 @@ function FormPrompt({ inicial, aoFechar }) {
       largo
       acoes={
         <>
+          {!novo && aoEnviar && (
+            <button className="btn sm ghost" type="button" onClick={() => aoEnviar(inicial)}>
+              Enviar para…
+            </button>
+          )}
+          {!novo && podePublicar && (
+            <button
+              className="btn sm ghost"
+              type="button"
+              style={{ marginRight: "auto" }}
+              disabled={publicado}
+              onClick={publicar}
+            >
+              {publicado ? "Publicado no time ✓" : "Publicar no time"}
+            </button>
+          )}
           <button className="btn ghost" type="button" onClick={aoFechar}>
             Cancelar
           </button>
@@ -192,55 +216,69 @@ function EnviarPrompt({ prompt, time, aoFechar }) {
   );
 }
 
-/* Quem escreveu e, se veio de outra pessoa, quem mandou. */
-function Autoria({ p, time, doTime }) {
-  const autor = p.criadoPor ? nomeDe(p.criadoPor, time) : "";
-  return (
-    <div className="prompt-autoria">
-      {doTime && <span className="prompt-selo">do time</span>}
-      {autor && <span>por <b>{autor}</b></span>}
-      {p.enviadoPor && <span>enviado por <b>{nomeDe(p.enviadoPor, time)}</b></span>}
-    </div>
-  );
-}
-
-function CartaoPrompt({ p, time, doTime, favorito, aoFavoritar, children }) {
+/* Card no mesmo desenho do Guipa Manager: ★ e título em cima com a
+   categoria à direita, onde usar em etiquetas, o começo do texto e três
+   botões. Enviar e publicar ficam dentro do Editar. Embaixo do texto, em
+   letra pequena, quem escreveu e quem mandou. */
+function CartaoPrompt({ p, time, doTime, favorito, aoFavoritar, copiado, aoCopiar, aoEditar, aoExcluir }) {
   const cat = categoriaPrompt(p.categoria);
+  const autor = p.criadoPor ? nomeDe(p.criadoPor, time) : "";
   return (
     <div className="card prompt-card">
       <div className="card-h">
-        <div className="t" style={{ textTransform: "none", fontSize: "0.9rem", color: "var(--text)" }}>
-          {p.titulo}
-        </div>
+        <button
+          className={"icon-ghost prompt-estrela" + (favorito ? " on" : "")}
+          type="button"
+          title={favorito ? "Tirar dos favoritos" : "Favoritar"}
+          aria-pressed={favorito}
+          onClick={aoFavoritar}
+        >
+          {favorito ? "★" : "☆"}
+        </button>
+        <div className="prompt-titulo">{p.titulo}</div>
         <div className="a">
-          <button
-            className={"btn sm ghost prompt-estrela" + (favorito ? " on" : "")}
-            type="button"
-            title={favorito ? "Tirar dos favoritos" : "Favoritar"}
-            aria-pressed={favorito}
-            onClick={aoFavoritar}
-          >
-            {favorito ? "★" : "☆"}
-          </button>
+          <span className="tag solid" style={{ background: cat.cor }}>
+            {cat.label}
+          </span>
         </div>
       </div>
-      <div className="prompt-linha">
-        <span className="tag" style={{ borderColor: cat.cor, color: cat.cor }}>
-          {cat.label}
-        </span>
-        {(p.ferramenta || p.modelo) && (
-          <span className="prompt-onde">
-            ▷ {p.ferramenta}
-            {p.modelo ? " · " + p.modelo : ""}
-          </span>
+      {(p.ferramenta || p.modelo) && (
+        <div className="prompt-onde">
+          {p.ferramenta && <span className="tag prompt-ferramenta">▷ {p.ferramenta}</span>}
+          {p.modelo && <span className="tag">{p.modelo}</span>}
+        </div>
+      )}
+      <div className="prompt-texto">{p.texto}</div>
+      {(p.tags || []).length > 0 && (
+        <div className="chips" style={{ marginTop: 10, marginBottom: 0 }}>
+          {p.tags.map((t) => (
+            <span className="tag" key={t}>
+              {t}
+            </span>
+          ))}
+        </div>
+      )}
+      {(autor || p.enviadoPor || doTime) && (
+        <div className="prompt-autoria">
+          {doTime && <span className="prompt-selo">do time</span>}
+          {autor && <span>por {autor}</span>}
+          {p.enviadoPor && <span>enviado por {nomeDe(p.enviadoPor, time)}</span>}
+        </div>
+      )}
+      <div className="prompt-acoes">
+        <button className="btn sm primary" type="button" onClick={aoCopiar}>
+          {copiado ? "Copiado ✓" : "Copiar"}
+        </button>
+        {aoEditar && (
+          <button className="btn sm ghost" type="button" onClick={aoEditar}>
+            Editar
+          </button>
         )}
-      </div>
-      <div className="note" style={{ marginTop: 10, maxHeight: 120, overflow: "hidden" }}>
-        {p.texto}
-      </div>
-      <Autoria p={p} time={time} doTime={doTime} />
-      <div className="midia-acoes" style={{ marginTop: 10 }}>
-        {children}
+        {aoExcluir && (
+          <button className="btn sm ghost" type="button" onClick={aoExcluir}>
+            ✕
+          </button>
+        )}
       </div>
     </div>
   );
@@ -260,7 +298,6 @@ export default function Prompts({ busca }) {
   const [excluindo, setExcluindo] = useState(null);
   const [enviando, setEnviando] = useState(null);
   const [copiado, setCopiado] = useState("");
-  const [publicado, setPublicado] = useState("");
   const [falha, setFalha] = useState("");
 
   useEffect(() => {
@@ -281,12 +318,6 @@ export default function Prompts({ busca }) {
     const r = await promessa;
     if (!r.ok) setFalha(r.erro);
     return r.ok;
-  }
-
-  async function publicar(p) {
-    if (!(await rodar(publicarPrompt(p, p.criadoPor || email)))) return;
-    setPublicado(p.id);
-    setTimeout(() => setPublicado(""), 1800);
   }
 
   async function copiar(p) {
@@ -386,11 +417,9 @@ export default function Prompts({ busca }) {
                 doTime
                 favorito={favoritos.includes(p.id)}
                 aoFavoritar={() => rodar(favoritarDoTime(p.id, email, !favoritos.includes(p.id)))}
-              >
-                <button className="btn sm" type="button" onClick={() => copiar(p)}>
-                  {copiado === p.id ? "copiado ✓" : "Copiar"}
-                </button>
-              </CartaoPrompt>
+                copiado={copiado === p.id}
+                aoCopiar={() => copiar(p)}
+              />
             ) : (
               <CartaoPrompt
                 key={p.id}
@@ -398,32 +427,28 @@ export default function Prompts({ busca }) {
                 time={time}
                 favorito={p.favorito}
                 aoFavoritar={() => rodar(alternarFavorito(p))}
-              >
-                <button className="btn sm" type="button" onClick={() => copiar(p)}>
-                  {copiado === p.id ? "copiado ✓" : "Copiar"}
-                </button>
-                <button className="btn sm ghost" type="button" onClick={() => setEnviando(p)}>
-                  Enviar
-                </button>
-                {podePublicar(p) && (
-                  <button className="btn sm ghost" type="button" onClick={() => publicar(p)}>
-                    {publicado === p.id ? "publicado ✓" : "Publicar no time"}
-                  </button>
-                )}
-                <button className="btn sm ghost" type="button" onClick={() => setEditando(p)}>
-                  Editar
-                </button>
-                <button className="btn sm ghost danger" type="button" onClick={() => setExcluindo(p)}>
-                  ✕
-                </button>
-              </CartaoPrompt>
+                copiado={copiado === p.id}
+                aoCopiar={() => copiar(p)}
+                aoEditar={() => setEditando(p)}
+                aoExcluir={() => setExcluindo(p)}
+              />
             )
           )}
         </div>
       )}
 
       {criando && <FormPrompt aoFechar={() => setCriando(false)} />}
-      {editando && <FormPrompt inicial={editando} aoFechar={() => setEditando(null)} />}
+      {editando && (
+        <FormPrompt
+          inicial={editando}
+          aoFechar={() => setEditando(null)}
+          podePublicar={podePublicar(editando)}
+          aoEnviar={(p) => {
+            setEditando(null);
+            setEnviando(p);
+          }}
+        />
+      )}
       {enviando && <EnviarPrompt prompt={enviando} time={time} aoFechar={() => setEnviando(null)} />}
       {excluindo && (
         <Confirmar

@@ -1177,20 +1177,23 @@
   .perfil-estado { font-size: 0.74rem; color: var(--text-dim); }
   .perfil-estado.ok { color: var(--ok); }
 
-  /* ---------- prompts ---------- */
-  .prompt-linha { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
-  .prompt-onde { font-size: 0.78rem; color: var(--text-dim); }
-  .prompt-autoria {
-    display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 10px;
-    font-size: 0.76rem; color: var(--text-dim);
+  /* ---------- prompts (desenho do Guipa Manager) ---------- */
+  .prompt-card .card-h { margin-bottom: 10px; }
+  .prompt-titulo { font-size: 0.92rem; font-weight: 700; min-width: 0; }
+  .prompt-estrela { width: 24px !important; height: 24px !important; flex: none; }
+  .prompt-onde { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; font-size: 0.76rem; }
+  .prompt-ferramenta { background: var(--accent-soft) !important; color: var(--accent-text) !important; font-weight: 700; }
+  .prompt-texto {
+    font-size: 0.8rem; color: var(--text-dim); line-height: 1.55;
+    max-height: 88px; overflow: hidden; white-space: pre-wrap; word-break: break-word;
   }
-  .prompt-autoria b { color: var(--text); font-weight: 600; }
+  .prompt-autoria { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 10px; font-size: 0.72rem; color: var(--text-dim); }
+  .prompt-acoes { display: flex; gap: 6px; margin-top: 12px; }
   .prompt-selo {
     font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
     padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-text);
   }
-  .prompt-estrela { font-size: 1rem; line-height: 1; }
-  .prompt-estrela.on { color: var(--accent); }
+  .prompt-estrela.on { color: var(--accent-text); }
 
   /* ---------- guias e medidas ---------- */
   .guia-grupo {

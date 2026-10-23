@@ -17,6 +17,7 @@ import { verificarAcesso } from "./lib/drive.js";
 import { iniciar as iniciarCompartilhado } from "./lib/compartilhado.js";
 import { iniciarCentral } from "./lib/central.js";
 import { iniciarPrompts, migrarLocais } from "./lib/prompts.js";
+import { iniciarKanbanPessoal } from "./lib/kanbanPessoal.js";
 import { pegarEstado, alterar } from "./lib/estado.js";
 import {
   carregar as carregarPermissoes,
@@ -99,6 +100,11 @@ export default function App() {
 
   /* Prompts que ainda estejam no navegador (versão antiga) sobem uma vez
      para o banco, como da pessoa logada, e saem do local. */
+  /* Quadro pessoal: traz do banco o desta conta e passa a espelhar. */
+  useEffect(() => {
+    if (auth.perfil?.email) iniciarKanbanPessoal(auth.perfil.email);
+  }, [auth.perfil?.email]);
+
   useEffect(() => {
     const email = auth.perfil?.email;
     const locais = pegarEstado().prompts || [];
