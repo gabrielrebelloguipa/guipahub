@@ -1191,3 +1191,30 @@
   }
   .prompt-estrela { font-size: 1rem; line-height: 1; }
   .prompt-estrela.on { color: var(--accent); }
+
+  /* ---------- guias e medidas ---------- */
+  .guia-grupo {
+    font-size: 0.74rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase;
+    color: var(--text-dim); margin: 6px 0 10px;
+  }
+  .guia-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .guia-card { border-top: 3px solid var(--ok); }
+  .guia-card.pendente { border-top-color: var(--warn); }
+  .guia-titulo { text-transform: none !important; font-size: 0.95rem !important; color: var(--text) !important; }
+  .guia-selo {
+    font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+    padding: 2px 8px; border-radius: 999px; color: var(--warn); border: 1px solid var(--warn);
+  }
+  .guia-spec {
+    display: flex; align-items: baseline; gap: 8px; padding: 7px 0;
+    border-bottom: 1px solid var(--border); font-size: 0.86rem;
+  }
+  .guia-spec:last-of-type { border-bottom: 0; }
+  .guia-ok { width: 16px; flex: none; text-align: center; color: var(--ok); font-weight: 800; }
+  .guia-ok.falta { color: var(--warn); }
+  .guia-k { color: var(--text-dim); min-width: 92px; }
+  .guia-v { font-weight: 600; margin-left: auto; text-align: right; }
+  .guia-v.falta { color: var(--warn); font-weight: 500; font-style: italic; }
+  .guia-notas { margin-top: 8px; font-size: 0.8rem; color: var(--text-dim); line-height: 1.5; }
+  .guia-specs-form { display: flex; flex-direction: column; gap: 6px; }
+  .guia-spec-linha { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 6px; }

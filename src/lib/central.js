@@ -53,9 +53,15 @@ async function carregar() {
   }
   definir({
     materiais: rm.data || [],
-    /* `pendente` não é coluna: é "ainda sem valor", e derivar evita que
-       as duas coisas discordem. */
-    guias: (rg.data || []).map((g) => ({ ...g, pendente: !String(g.valor || "").trim() })),
+    /* Guia é um card com várias medidas (specs). Guia antiga, de um valor
+       só, vira uma medida com esse valor. `pendente` não é coluna: é
+       "alguma medida sem valor", e derivar evita que as duas discordem. */
+    guias: (rg.data || []).map((g) => {
+      const specs = Array.isArray(g.specs) && g.specs.length
+        ? g.specs
+        : g.valor ? [{ k: "", v: g.valor }] : [];
+      return { ...g, specs, pendente: !specs.length || specs.some((x) => !String(x.v || "").trim()) };
+    }),
     imagens: ri.data || [],
     carregando: false,
     erro: "",
@@ -85,21 +91,55 @@ async function feito(promessa) {
 
 /* ---------- materiais ---------- */
 
-export function salvarMaterial(m) {
+/* Material pode ter um arquivo (PDF, projeto, zip…) no bucket. Sobe o
+   arquivo novo antes de gravar a linha; o antigo só sai depois que a
+   linha já aponta para o novo, para nunca ficar apontando para o nada. */
+export async function salvarMaterial(m, arquivo) {
   const linha = {
     nome: m.nome.trim(),
     categoria: m.categoria || "",
     url: m.url || "",
     notas: m.notas || "",
   };
-  return feito(
+  let novoCaminho = "";
+  if (arquivo) {
+    novoCaminho = `mat/${crypto.randomUUID()}.${extensao(arquivo)}`;
+    const up = await supabase.storage.from(BUCKET).upload(novoCaminho, arquivo, {
+      contentType: arquivo.type || "application/octet-stream",
+      upsert: false,
+    });
+    if (up.error) return { ok: false, erro: explicarErro(up.error) };
+    linha.caminho = novoCaminho;
+    linha.arquivo_nome = arquivo.name || "arquivo";
+    linha.bytes = arquivo.size || 0;
+  }
+  const r = await feito(
     m.id
       ? supabase.from("central_materiais").update(linha).eq("id", m.id)
       : supabase.from("central_materiais").insert(linha)
   );
+  if (!r.ok && novoCaminho) await supabase.storage.from(BUCKET).remove([novoCaminho]);
+  if (r.ok && novoCaminho && m.caminho) await supabase.storage.from(BUCKET).remove([m.caminho]);
+  return r;
 }
-export function excluirMaterial(id) {
-  return feito(supabase.from("central_materiais").delete().eq("id", id));
+export async function excluirMaterial(m) {
+  const r = await feito(supabase.from("central_materiais").delete().eq("id", m.id));
+  if (r.ok && m.caminho) await supabase.storage.from(BUCKET).remove([m.caminho]);
+  return r;
+}
+
+/* Baixa com o nome original do arquivo. */
+export async function baixarArquivo(caminho, nome) {
+  const { data, error } = await supabase.storage.from(BUCKET).download(caminho);
+  if (error) throw new Error(explicarErro(error));
+  const url = URL.createObjectURL(data);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nome || caminho.split("/").pop();
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
 /* ---------- guias ---------- */
@@ -108,7 +148,10 @@ export function salvarGuia(g) {
   const linha = {
     grupo: g.grupo || "",
     titulo: g.titulo.trim(),
-    valor: g.valor || "",
+    specs: (g.specs || [])
+      .map((x) => ({ k: String(x.k || "").trim(), v: String(x.v || "").trim() }))
+      .filter((x) => x.k || x.v),
+    valor: "",
     notas: g.notas || "",
   };
   return feito(

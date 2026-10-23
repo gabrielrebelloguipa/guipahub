@@ -16,6 +16,7 @@ import {
   excluirImagem,
   linkDaImagem,
   baixarImagem,
+  baixarArquivo,
   enviarDoNavegador,
   LIMITE_BYTES,
 } from "../lib/central.js";
@@ -52,16 +53,18 @@ function FormMaterial({ inicial, aoFechar }) {
   const [m, setM] = useState(
     inicial || { nome: "", categoria: CATEGORIAS_MATERIAL[0], url: "", notas: "" }
   );
+  const [arquivo, setArquivo] = useState(null);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
 
   async function salvar() {
     const nome = m.nome.trim();
     if (!nome) return;
+    if (arquivo && arquivo.size > LIMITE_BYTES) return setErro("O arquivo passa de 25 MB.");
     let url = (m.url || "").trim();
     if (url && !/^https?:\/\//i.test(url)) url = "https://" + url;
     setSalvando(true);
-    const r = await salvarMaterial({ ...m, nome, url });
+    const r = await salvarMaterial({ ...m, nome, url }, arquivo);
     setSalvando(false);
     if (!r.ok) return setErro(r.erro);
     aoFechar();
@@ -107,6 +110,17 @@ function FormMaterial({ inicial, aoFechar }) {
             onChange={(e) => setM({ ...m, url: e.target.value })}
           />
         </div>
+      </div>
+      <div className="field">
+        <label>Arquivo</label>
+        <label className="btn sm" style={{ cursor: "pointer" }}>
+          {arquivo ? arquivo.name : m.arquivo_nome ? "Trocar " + m.arquivo_nome : "Escolher arquivo"}
+          <input
+            type="file"
+            style={{ display: "none" }}
+            onChange={(e) => setArquivo(e.target.files[0] || null)}
+          />
+        </label>
       </div>
       <div className="field">
         <label>Descrição</label>
@@ -176,10 +190,7 @@ function Materiais({ busca }) {
       <ErroBanco erro={erro} />
 
       {!lista.length ? (
-        <div className="empty">
-          Nenhum material cadastrado. Aponte para as pastas e arquivos oficiais da
-          GUIPA no Drive.
-        </div>
+        <div className="empty">Nenhum material.</div>
       ) : (
         <div className="list">
           {lista.map((m) => (
@@ -189,10 +200,20 @@ function Materiais({ busca }) {
                 <div className="ttl">{m.nome}</div>
                 <div className="meta">
                   <span>{m.categoria}</span>
+                  {m.arquivo_nome && <span>{m.arquivo_nome}</span>}
                   {m.notas && <span>{m.notas}</span>}
                 </div>
               </div>
               <div className="right">
+                {m.caminho && (
+                  <button
+                    className="btn sm"
+                    type="button"
+                    onClick={() => baixarArquivo(m.caminho, m.arquivo_nome).catch((e) => setErro(e.message))}
+                  >
+                    Baixar
+                  </button>
+                )}
                 {m.url && (
                   <a className="btn sm" href={m.url} target="_blank" rel="noopener">
                     Abrir
@@ -220,7 +241,7 @@ function Materiais({ busca }) {
         <Confirmar
           mensagem={`Excluir “${excluindo.nome}”? Some para o time inteiro.`}
           aoConfirmar={async () => {
-            const r = await excluirMaterial(excluindo.id);
+            const r = await excluirMaterial(excluindo);
             if (!r.ok) setErro(r.erro);
           }}
           aoFechar={() => setExcluindo(null)}
@@ -351,6 +372,17 @@ function ImagensGuipa({ busca }) {
                 <button className="btn sm" type="button" onClick={() => copiar(i)}>
                   Copiar
                 </button>
+                <button
+                  className="btn sm"
+                  type="button"
+                  onClick={() =>
+                    baixarArquivo(i.caminho, i.nome + "." + (i.caminho.split(".").pop() || "png")).catch((e) =>
+                      setAviso("Não consegui baixar: " + e.message)
+                    )
+                  }
+                >
+                  Baixar
+                </button>
                 {podeFazer("central", "excluir") && (
                   <button className="btn sm ghost danger" type="button" onClick={() => setExcluindo(i)}>
                     ✕
@@ -425,10 +457,17 @@ function CoresGuipa() {
 
 function FormGuia({ inicial, aoFechar }) {
   const novo = !inicial;
-  const [g, setG] = useState(inicial || { titulo: "", grupo: GRUPOS_GUIA[0], valor: "", notas: "" });
+  const [g, setG] = useState(
+    inicial
+      ? { ...inicial, specs: inicial.specs?.length ? inicial.specs : [{ k: "", v: "" }] }
+      : { titulo: "", grupo: GRUPOS_GUIA[0], specs: [{ k: "", v: "" }], notas: "" }
+  );
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const podeFazer = usePode();
+
+  const mudaSpec = (i, patch) =>
+    setG({ ...g, specs: g.specs.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
 
   async function salvar() {
     const titulo = g.titulo.trim();
@@ -470,16 +509,16 @@ function FormGuia({ inicial, aoFechar }) {
         </>
       }
     >
-      <div className="field">
-        <label>Título</label>
-        <input
-          type="text"
-          value={g.titulo}
-          placeholder="Ex: medida da tela LED do baú"
-          onChange={(e) => setG({ ...g, titulo: e.target.value })}
-        />
-      </div>
       <div className="f-row">
+        <div className="field">
+          <label>Título</label>
+          <input
+            type="text"
+            value={g.titulo}
+            placeholder="Ex: Tela LED do baú"
+            onChange={(e) => setG({ ...g, titulo: e.target.value })}
+          />
+        </div>
         <div className="field">
           <label>Grupo</label>
           <select value={g.grupo} onChange={(e) => setG({ ...g, grupo: e.target.value })}>
@@ -490,14 +529,41 @@ function FormGuia({ inicial, aoFechar }) {
             ))}
           </select>
         </div>
-        <div className="field">
-          <label>Valor</label>
-          <input
-            type="text"
-            value={g.valor}
-            placeholder="deixe vazio se ainda não sabe"
-            onChange={(e) => setG({ ...g, valor: e.target.value })}
-          />
+      </div>
+      <div className="field">
+        <label>Medidas</label>
+        <div className="guia-specs-form">
+          {g.specs.map((x, i) => (
+            <div className="guia-spec-linha" key={i}>
+              <input
+                type="text"
+                value={x.k}
+                placeholder="Ex: Largura"
+                onChange={(e) => mudaSpec(i, { k: e.target.value })}
+              />
+              <input
+                type="text"
+                value={x.v}
+                placeholder="vazio = a confirmar"
+                onChange={(e) => mudaSpec(i, { v: e.target.value })}
+              />
+              <button
+                className="btn sm ghost danger"
+                type="button"
+                aria-label="Tirar medida"
+                onClick={() => setG({ ...g, specs: g.specs.filter((_, j) => j !== i) })}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          <button
+            className="btn sm ghost"
+            type="button"
+            onClick={() => setG({ ...g, specs: [...g.specs, { k: "", v: "" }] })}
+          >
+            ＋ Medida
+          </button>
         </div>
       </div>
       <div className="field">
@@ -516,7 +582,7 @@ function Guias({ busca }) {
 
   const lista = central.guias.filter((g) =>
     busca
-      ? (g.titulo + " " + (g.valor || "") + " " + (g.notas || "")).toLowerCase().includes(busca.toLowerCase())
+      ? (g.titulo + " " + g.specs.map((x) => x.k + " " + x.v).join(" ") + " " + (g.notas || "")).toLowerCase().includes(busca.toLowerCase())
       : true
   );
   const pendentes = central.guias.filter((g) => g.pendente).length;
@@ -544,33 +610,39 @@ function Guias({ busca }) {
       </div>
 
       {!lista.length ? (
-        <div className="empty">
-          Nenhum guia cadastrado. Medidas da tela, do baú, arquivo do Photoshop,
-          como a mídia é exibida.
-        </div>
+        <div className="empty">Nenhum guia.</div>
       ) : (
         GRUPOS_GUIA.map((grupo) => {
           const doGrupo = lista.filter((g) => g.grupo === grupo);
           if (!doGrupo.length) return null;
           return (
-            <div className="card" key={grupo} style={{ marginBottom: 14 }}>
-              <div className="card-h">
-                <div className="t">{grupo}</div>
-              </div>
-              {doGrupo.map((g) => (
-                <div className="kv" key={g.id}>
-                  <div className="k">{g.titulo}</div>
-                  <div className="v">
-                    {g.valor ? g.valor : <span style={{ color: "var(--warn)" }}>a confirmar</span>}
-                    {g.notas && <div className="sub">{g.notas}</div>}
+            <div key={grupo} style={{ marginBottom: 18 }}>
+              <div className="guia-grupo">{grupo}</div>
+              <div className="guia-grade">
+                {doGrupo.map((g) => (
+                  <div className={"card guia-card" + (g.pendente ? " pendente" : "")} key={g.id}>
+                    <div className="card-h">
+                      <div className="t guia-titulo">{g.titulo}</div>
+                      <div className="a">
+                        {g.pendente && <span className="guia-selo">a confirmar</span>}
+                        {podeFazer("central", "editar") && (
+                          <button className="btn sm ghost" type="button" onClick={() => setEditando(g)}>
+                            Editar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {g.specs.map((x, i) => (
+                      <div className="guia-spec" key={i}>
+                        <span className={"guia-ok" + (x.v ? "" : " falta")}>{x.v ? "✓" : "!"}</span>
+                        {x.k && <span className="guia-k">{x.k}</span>}
+                        <span className={"guia-v" + (x.v ? "" : " falta")}>{x.v || "a confirmar"}</span>
+                      </div>
+                    ))}
+                    {g.notas && <div className="guia-notas">{g.notas}</div>}
                   </div>
-                  {podeFazer("central", "editar") && (
-                    <button className="btn sm ghost" type="button" onClick={() => setEditando(g)}>
-                      Editar
-                    </button>
-                  )}
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           );
         })
