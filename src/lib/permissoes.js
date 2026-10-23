@@ -291,7 +291,13 @@ export async function salvarMeuTelefone(telefone) {
     .update({ telefone: String(telefone || "").trim() })
     .eq("id", estado.eu.id);
   if (error) return { ok: false, erro: explicarErro(error) };
-  await carregar(estado.eu?.email);
+  /* Atualiza só o telefone em vez de recarregar tudo: recarregar põe a
+     tela de Configurações em "carregando" e some com o "salvo". */
+  const tel = String(telefone || "").trim();
+  definir({
+    eu: { ...estado.eu, telefone: tel },
+    perfis: estado.perfis.map((p) => (p.id === estado.eu.id ? { ...p, telefone: tel } : p)),
+  });
   return { ok: true };
 }
 
