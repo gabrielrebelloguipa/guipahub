@@ -3,6 +3,7 @@ import { useAuth } from "../lib/useAuth.js";
 import { pode } from "../lib/permissoes.js";
 import { pedirToken } from "../lib/auth.js";
 import {
+  verificarAcesso,
   aquecerArvore,
   raizConfigurada,
   nomeDaRaiz,
@@ -294,6 +295,13 @@ export default function Imagens({ busca }) {
 
   const [filtro, setFiltro] = useState("");
   const [aberto, setAberto] = useState(null);
+
+  /* A conferência de acesso ao Drive (e, se o acesso de 1 hora venceu, a
+     ida ao Google para renovar) acontece ao abrir esta aba — não ao abrir
+     o app, que não precisa do Drive para mais nada. */
+  useEffect(() => {
+    verificarAcesso();
+  }, [auth.perfil?.email]);
 
   useEffect(() => {
     if (!raiz) return;

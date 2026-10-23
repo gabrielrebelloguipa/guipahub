@@ -14,8 +14,7 @@ const Configuracoes = lazy(() => import("./abas/Configuracoes.jsx"));
 const Calculadora = lazy(() => import("./abas/Calculadora.jsx"));
 import { useAuth } from "./lib/useAuth.js";
 import { useMenu } from "./lib/menu.js";
-import { restaurarSessao, tokenValido, renovarAcessoDrive } from "./lib/auth.js";
-import { verificarAcesso } from "./lib/drive.js";
+import { restaurarSessao } from "./lib/auth.js";
 import { iniciar as iniciarCompartilhado } from "./lib/compartilhado.js";
 import { iniciarCentral } from "./lib/central.js";
 import { iniciarPrompts, migrarLocais } from "./lib/prompts.js";
@@ -43,31 +42,47 @@ const TITULOS = {
 /* Fora do componente: o StrictMode roda o efeito duas vezes, e subir os
    mesmos prompts duas vezes duplicaria tudo. */
 let migrandoPrompts = false;
+const ABA_KEY = "guipahub_aba";
 
 export default function App() {
   const auth = useAuth();
   /* Sem escolha ainda, abre no primeiro item do menu da pessoa: quem pôs
      a Calculadora no topo cai direto nela. */
-  const [escolhida, setSecao] = useState(null);
+  const [escolhida, setEscolhida] = useState(() => {
+    try {
+      return sessionStorage.getItem(ABA_KEY) || null;
+    } catch {
+      return null;
+    }
+  });
+  /* A aba aberta é lembrada nesta janela: quando a página recarrega (ou
+     vai ao Google renovar o Drive e volta), a pessoa continua onde estava. */
+  function setSecao(aba) {
+    setEscolhida(aba);
+    try {
+      sessionStorage.setItem(ABA_KEY, aba);
+    } catch {
+      /* sem sessionStorage: só não lembra */
+    }
+  }
   const menu = useMenu();
-  const secao = escolhida ?? menu.todas[0]?.key ?? "hoje";
+  /* Aba lembrada só vale se a pessoa ainda pode ver essa aba. */
+  const secao =
+    (escolhida && menu.todas.some((a) => a.key === escolhida) ? escolhida : null) ??
+    menu.todas[0]?.key ??
+    "hoje";
   const [busca, setBusca] = useState("");
 
   useEffect(() => {
     restaurarSessao();
   }, []);
 
-  /* Sessão de pé mas sem token do Drive — porque passou da hora de vida
-     dele. Busca um novo sem perguntar nada: como não pedimos mais a tela
-     de consentimento, é um piscar de redirecionamento e a pessoa volta
-     para onde estava.
-
-     Isto roda depois que o perfil chega, e não na montagem: restaurar a
-     sessão é assíncrono, então perguntar "tem sessão?" na linha seguinte
-     respondia não mesmo quando havia. */
-  useEffect(() => {
-    if (auth.perfil && !tokenValido()) renovarAcessoDrive();
-  }, [auth.perfil?.email, auth.expirou]);
+  /* O acesso ao Drive (que o Google dá por 1 hora) NÃO é renovado aqui.
+     Renovar é uma ida ao Google e volta — o "piscar" — e só a aba Imagens
+     precisa do Drive. Antes isso acontecia em toda abertura do app depois
+     de uma hora, mesmo para quem nem ia abrir Imagens. Agora quem pede é
+     a própria aba, quando é aberta (ver Clientes.jsx). O login do
+     GuipaHub em si não depende disso e não expira. */
 
   /* Carrega os dados compartilhados uma vez, depois de ter sessao —
      sem sessao o banco recusa tudo, entao pedir antes seria uma ida
@@ -79,14 +94,6 @@ export default function App() {
     iniciarPrompts();
     carregarPermissoes(auth.perfil.email);
     ouvirPermissoes(auth.perfil.email);
-  }, [auth.perfil?.email]);
-
-  /* A verificação de acesso ao Drive mora aqui, e não dentro do auth,
-     porque auth não deve conhecer o Drive — senão os dois se importam em
-     círculo. Quem entrou é o gatilho; o e-mail na dependência garante que
-     trocar de conta refaz a pergunta. */
-  useEffect(() => {
-    if (auth.perfil) verificarAcesso();
   }, [auth.perfil?.email]);
 
   /* A raiz do Drive vive no banco; o drive.js nao conhece o banco. O App,
