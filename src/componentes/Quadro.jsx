@@ -45,6 +45,10 @@ function CartaoModal({ tarefa, listas, api, aoFechar, pode = TUDO, historico }) 
   /* Quem só pode mover ainda troca a lista pelo seletor — é o mesmo
      gesto do arraste, em outro lugar. Os outros campos ficam travados. */
   const soLe = !pode.editar;
+  /* No quadro pessoal (sem `eu`) a pessoa exclui tudo; no de marca, só o
+     que ela criou, a menos que tenha "Excluir de outros". */
+  const meu = (d.criadoPor || "").toLowerCase() === pode.eu;
+  const podeExcluir = !!pode.excluirOutros || (pode.excluir && (pode.eu == null || meu));
   const lista = listas.find((L) => L.id === d.status);
   const cor = lista?.cor || "var(--accent)";
 
@@ -62,7 +66,7 @@ function CartaoModal({ tarefa, listas, api, aoFechar, pode = TUDO, historico }) 
         estilo={{ "--cor-lista": cor }}
         acoes={
           <>
-            {pode.excluir && (
+            {podeExcluir && (
               <button
                 className="btn sm ghost danger"
                 type="button"

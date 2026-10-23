@@ -29,7 +29,11 @@ export default function Kanban({ busca }) {
     criar: podeFazer("demandas", "criar"),
     editar: podeFazer("demandas", "editar"),
     mover: podeFazer("demandas", "mover"),
+    /* "Excluir" vale para o cartão que a própria pessoa criou; o dos
+       outros só com "Excluir de outros" (ver 17-excluir-cartao-proprio). */
     excluir: podeFazer("demandas", "excluir"),
+    excluirOutros: podeFazer("demandas", "excluir_outros"),
+    eu: (auth.perfil?.email || "").toLowerCase(),
     colunas: podeFazer("demandas", "colunas"),
   };
 

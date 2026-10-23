@@ -21,7 +21,7 @@ import { useMenu, salvarOrdem } from "../lib/menu.js";
 
 /* Colunas na ordem em que a pessoa pensa: primeiro "enxergo?", depois
    o que faço, do mais leve ao mais destrutivo. */
-const COLUNAS = ["ver", "criar", "editar", "mover", "comentar", "excluir", "colunas", "baixar", "publicar"];
+const COLUNAS = ["ver", "criar", "editar", "mover", "comentar", "excluir", "excluir_outros", "colunas", "baixar", "publicar"];
 const COLUNAS_USADAS = COLUNAS.filter((c) => AREAS.some((a) => a.acoes.includes(c)));
 
 /* O mapa completo {area: {acao: bool}} de alguém, já resolvido: exceção

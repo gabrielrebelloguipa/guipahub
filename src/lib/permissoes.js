@@ -42,7 +42,7 @@ export const AREAS = [
   {
     key: "demandas",
     label: "Kanban",
-    acoes: ["ver", "criar", "editar", "mover", "comentar", "excluir", "colunas"],
+    acoes: ["ver", "criar", "editar", "mover", "comentar", "excluir", "excluir_outros", "colunas"],
   },
   { key: "central", label: "Central Guipa", acoes: ["ver", "criar", "editar", "excluir"] },
   { key: "marcas", label: "Marcas", acoes: ["ver", "criar", "editar", "excluir"] },
@@ -59,6 +59,7 @@ export const ROTULO_ACAO = {
   editar: "Editar",
   mover: "Mover",
   excluir: "Excluir",
+  excluir_outros: "Excluir de outros",
   colunas: "Criar e excluir colunas",
   comentar: "Comentar",
   baixar: "Baixar e copiar",
@@ -79,7 +80,7 @@ const ABAS_PADRAO_INICIAL = ["hoje", "demandas", "central", "clientes", "calcula
 
 const PERMISSOES_PADRAO_INICIAL = {
   hoje: { ver: true },
-  demandas: { ver: true, criar: true, editar: true, mover: true, comentar: true, excluir: false, colunas: false },
+  demandas: { ver: true, criar: true, editar: true, mover: true, comentar: true, excluir: false, excluir_outros: false, colunas: false },
   central: { ver: true, criar: false, editar: false, excluir: false },
   marcas: { ver: false, criar: false, editar: false, excluir: false },
   clientes: { ver: true, baixar: true },
