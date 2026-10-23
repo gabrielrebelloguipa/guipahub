@@ -80,7 +80,7 @@ const ABAS_PADRAO_INICIAL = ["hoje", "demandas", "central", "clientes", "calcula
 
 const PERMISSOES_PADRAO_INICIAL = {
   hoje: { ver: true },
-  demandas: { ver: true, criar: true, editar: true, mover: true, comentar: true, excluir: false, excluir_outros: false, colunas: false },
+  demandas: { ver: true, criar: true, editar: true, mover: true, comentar: true, excluir: true, excluir_outros: false, colunas: false },
   central: { ver: true, criar: false, editar: false, excluir: false },
   marcas: { ver: false, criar: false, editar: false, excluir: false },
   clientes: { ver: true, baixar: true },
