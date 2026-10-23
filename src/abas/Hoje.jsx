@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useEstado, alterar, uid, statusInfo } from "../lib/estado.js";
 import { fmtData, diasAte, categoriaPrompt } from "../lib/constantes.js";
 import Modal from "../componentes/Modal.jsx";
+import { usePrompts } from "../lib/prompts.js";
+import { useCompartilhado as useCompartilhadoHoje } from "../lib/compartilhado.js";
 
 function FormAtalho({ inicial, aoFechar }) {
   const novo = !inicial;
@@ -82,6 +84,7 @@ function FormAtalho({ inicial, aoFechar }) {
 
 export default function Hoje({ aoIrPara }) {
   const estado = useEstado();
+  const compartilhadoHoje = useCompartilhadoHoje();
   const [editandoAtalho, setEditandoAtalho] = useState(null);
   const [criandoAtalho, setCriandoAtalho] = useState(false);
 
@@ -96,7 +99,13 @@ export default function Hoje({ aoIrPara }) {
     })
     .sort((a, b) => (a.prazo || "").localeCompare(b.prazo || ""));
 
-  const favoritos = estado.prompts.filter((p) => p.favorito);
+  /* Favoritos: os prompts da pessoa marcados com ★ e os do time que ela
+     favoritou na biblioteca. */
+  const { meus, favoritos: favDoTime } = usePrompts();
+  const favoritos = [
+    ...meus.filter((p) => p.favorito),
+    ...(compartilhadoHoje.biblioteca || []).filter((b) => favDoTime.includes(b.id)),
+  ];
 
   const grupos = {};
   for (const a of estado.atalhos) {
@@ -215,7 +224,7 @@ export default function Hoje({ aoIrPara }) {
             </div>
           </div>
           {!favoritos.length ? (
-            <div className="empty">Marque prompts com ★ para eles aparecerem aqui.</div>
+            <div className="empty">Nenhum favorito.</div>
           ) : (
             <div className="list">
               {favoritos.map((p) => {

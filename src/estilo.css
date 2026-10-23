@@ -1176,3 +1176,18 @@
   .perfil-linha > span:first-child { color: var(--text-dim); font-size: 0.8rem; }
   .perfil-estado { font-size: 0.74rem; color: var(--text-dim); }
   .perfil-estado.ok { color: var(--ok); }
+
+  /* ---------- prompts ---------- */
+  .prompt-linha { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+  .prompt-onde { font-size: 0.78rem; color: var(--text-dim); }
+  .prompt-autoria {
+    display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 10px;
+    font-size: 0.76rem; color: var(--text-dim);
+  }
+  .prompt-autoria b { color: var(--text); font-weight: 600; }
+  .prompt-selo {
+    font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+    padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-text);
+  }
+  .prompt-estrela { font-size: 1rem; line-height: 1; }
+  .prompt-estrela.on { color: var(--accent); }

@@ -1,52 +1,43 @@
+import { useEffect, useState } from "react";
 import { usePode } from "../lib/permissoes.js";
-import { useState } from "react";
-import { useEstado, alterar, uid } from "../lib/estado.js";
+import { useAuth } from "../lib/useAuth.js";
 import {
   useCompartilhado,
   publicarPrompt,
   normaliza,
+  pessoas,
+  nomeDe,
 } from "../lib/compartilhado.js";
-import { useAuth } from "../lib/useAuth.js";
 import {
-  CATEGORIAS_PROMPT,
-  categoriaPrompt,
-  FERRAMENTAS_IA,
-} from "../lib/constantes.js";
+  usePrompts,
+  salvarPrompt,
+  excluirPrompt,
+  alternarFavorito,
+  favoritarDoTime,
+  enviarPrompt,
+} from "../lib/prompts.js";
+import { CATEGORIAS_PROMPT, categoriaPrompt, FERRAMENTAS_IA } from "../lib/constantes.js";
 import Modal, { Confirmar } from "../componentes/Modal.jsx";
-import AvisoAlcance from "../componentes/AvisoAlcance.jsx";
 
 function FormPrompt({ inicial, aoFechar }) {
+  const auth = useAuth();
   const novo = !inicial;
   const [p, setP] = useState(
-    inicial || {
-      titulo: "",
-      texto: "",
-      tags: [],
-      favorito: false,
-      categoria: "imagem",
-      ferramenta: "",
-      modelo: "",
-    }
+    inicial || { titulo: "", texto: "", tags: [], favorito: false, categoria: "imagem", ferramenta: "", modelo: "" }
   );
   const [tagsTexto, setTagsTexto] = useState((inicial?.tags || []).join(", "));
+  const [erro, setErro] = useState("");
+  const [salvando, setSalvando] = useState(false);
 
-  function salvar() {
-    const titulo = p.titulo.trim();
-    if (!titulo) return;
-    const alvo = {
-      ...p,
-      id: p.id || uid("p"),
-      titulo,
-      tags: tagsTexto
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean),
-    };
-    alterar((e) => ({
-      prompts: novo
-        ? [alvo, ...e.prompts]
-        : e.prompts.map((x) => (x.id === alvo.id ? alvo : x)),
-    }));
+  async function salvar() {
+    if (!p.titulo.trim()) return;
+    setSalvando(true);
+    const r = await salvarPrompt(
+      { ...p, tags: tagsTexto.split(",").map((t) => t.trim()).filter(Boolean) },
+      auth.perfil?.email
+    );
+    setSalvando(false);
+    if (!r.ok) return setErro(r.erro);
     aoFechar();
   }
 
@@ -60,12 +51,13 @@ function FormPrompt({ inicial, aoFechar }) {
           <button className="btn ghost" type="button" onClick={aoFechar}>
             Cancelar
           </button>
-          <button className="btn primary" type="button" onClick={salvar}>
-            Salvar
+          <button className="btn primary" type="button" disabled={salvando} onClick={salvar}>
+            {salvando ? "Salvando…" : "Salvar"}
           </button>
         </>
       }
     >
+      {erro && <div className="banner" style={{ borderColor: "var(--danger)" }}>{erro}</div>}
       <div className="field">
         <label>Título</label>
         <input
@@ -87,10 +79,7 @@ function FormPrompt({ inicial, aoFechar }) {
       <div className="f-row">
         <div className="field">
           <label>Categoria</label>
-          <select
-            value={p.categoria}
-            onChange={(e) => setP({ ...p, categoria: e.target.value })}
-          >
+          <select value={p.categoria} onChange={(e) => setP({ ...p, categoria: e.target.value })}>
             {CATEGORIAS_PROMPT.map((c) => (
               <option key={c.key} value={c.key}>
                 {c.label}
@@ -137,158 +126,168 @@ function FormPrompt({ inicial, aoFechar }) {
   );
 }
 
+/* Escolhe o colega e manda uma cópia. A lista é de quem já entrou no
+   GuipaHub — quem nunca entrou ainda não tem onde receber. */
+function EnviarPrompt({ prompt, time, aoFechar }) {
+  const auth = useAuth();
+  const eu = (auth.perfil?.email || "").toLowerCase();
+  const colegas = time.filter((p) => p.email?.toLowerCase() !== eu);
+  const [para, setPara] = useState("");
+  const [estado, setEstado] = useState(""); // "" | "enviando" | "ok" | erro
 
-/* A biblioteca e o balcao comum: qualquer um publica, qualquer um leva
-   uma copia para os prompts pessoais. Importar COPIA de proposito —
-   depois de importado o prompt e seu, e editar nao mexe no dos outros.
-   Referencia viva daria versionamento e conflito para um problema que
-   ninguem tem. */
-function Biblioteca({ aoFechar }) {
-  const compartilhado = useCompartilhado();
-  const estado = useEstado();
-  const [filtro, setFiltro] = useState("");
-  const [importados, setImportados] = useState([]);
-
-  const lista = (compartilhado.biblioteca || []).filter((p) =>
-    filtro
-      ? (p.titulo + " " + p.texto + " " + (p.tags || []).join(" "))
-          .toLowerCase()
-          .includes(filtro.toLowerCase())
-      : true
-  );
-
-  /* Ja tenho isto? Compara pelo titulo sem acento e sem maiuscula —
-     evita a pessoa importar o mesmo prompt tres vezes sem perceber. */
-  function jaTenho(p) {
-    return estado.prompts.some((x) => normaliza(x.titulo) === normaliza(p.titulo));
-  }
-
-  function importar(p) {
-    alterar((e) => ({
-      prompts: [
-        {
-          id: uid("p"),
-          titulo: p.titulo,
-          texto: p.texto,
-          tags: [...(p.tags || [])],
-          categoria: p.categoria || "outro",
-          ferramenta: p.ferramenta || "",
-          modelo: p.modelo || "",
-          favorito: false,
-          daBiblioteca: p.id,
-        },
-        ...e.prompts,
-      ],
-    }));
-    setImportados((v) => [...v, p.id]);
+  async function enviar() {
+    if (!para) return;
+    setEstado("enviando");
+    const r = await enviarPrompt(prompt, para, eu);
+    setEstado(r.ok ? "ok" : r.erro);
   }
 
   return (
-    <Modal titulo="Biblioteca de prompts" aoFechar={aoFechar} largo>
-      <AvisoAlcance>
-        Prompts que o time publicou. Importar traz uma <b>cópia</b> para os
-        seus — depois é seu, e editar não afeta ninguém.
-      </AvisoAlcance>
-
-      <div className="field">
-        <input
-          type="text"
-          value={filtro}
-          placeholder="Buscar na biblioteca..."
-          onChange={(e) => setFiltro(e.target.value)}
-        />
-      </div>
-
-      {!lista.length ? (
-        <div className="empty">
-          {filtro
-            ? "Nada encontrado."
-            : "A biblioteca esta vazia. Publique um prompt pelo botao Publicar num card."}
-        </div>
+    <Modal
+      titulo={"Enviar “" + prompt.titulo + "”"}
+      aoFechar={aoFechar}
+      acoes={
+        estado === "ok" ? (
+          <button className="btn primary" type="button" onClick={aoFechar}>
+            Fechar
+          </button>
+        ) : (
+          <>
+            <button className="btn ghost" type="button" onClick={aoFechar}>
+              Cancelar
+            </button>
+            <button
+              className="btn primary"
+              type="button"
+              disabled={!para || estado === "enviando"}
+              onClick={enviar}
+            >
+              {estado === "enviando" ? "Enviando…" : "Enviar"}
+            </button>
+          </>
+        )
+      }
+    >
+      {estado === "ok" ? (
+        <div className="note">Enviado para {nomeDe(para, time)}.</div>
       ) : (
-        <div className="list">
-          {lista.map((p) => {
-            const cat = categoriaPrompt(p.categoria);
-            const tenho = jaTenho(p);
-            const acabouDeImportar = importados.includes(p.id);
-            return (
-              <div className="row" key={p.id} style={{ cursor: "default" }}>
-                <div className="bar" style={{ background: cat.cor }} />
-                <div className="body">
-                  <div className="ttl">{p.titulo}</div>
-                  <div className="meta">
-                    <span>{cat.label}</span>
-                    {p.ferramenta && <span>&#9655; {p.ferramenta}</span>}
-                    {p.criadoPor && <span>por {p.criadoPor}</span>}
-                  </div>
-                </div>
-                <div className="right">
-                  <button
-                    className={"btn sm" + (tenho || acabouDeImportar ? " ghost" : "")}
-                    type="button"
-                    disabled={acabouDeImportar}
-                    onClick={() => importar(p)}
-                  >
-                    {acabouDeImportar
-                      ? "importado"
-                      : tenho
-                      ? "importar de novo"
-                      : "Importar"}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <>
+          <div className="field">
+            <label>Para</label>
+            <select value={para} onChange={(e) => setPara(e.target.value)}>
+              <option value="">Escolha a pessoa</option>
+              {colegas.map((p) => (
+                <option key={p.email} value={p.email}>
+                  {p.nome || p.email}
+                </option>
+              ))}
+            </select>
+          </div>
+          {estado && estado !== "enviando" && (
+            <div className="banner" style={{ borderColor: "var(--danger)" }}>{estado}</div>
+          )}
+        </>
       )}
     </Modal>
   );
 }
 
+/* Quem escreveu e, se veio de outra pessoa, quem mandou. */
+function Autoria({ p, time, doTime }) {
+  const autor = p.criadoPor ? nomeDe(p.criadoPor, time) : "";
+  return (
+    <div className="prompt-autoria">
+      {doTime && <span className="prompt-selo">do time</span>}
+      {autor && <span>por <b>{autor}</b></span>}
+      {p.enviadoPor && <span>enviado por <b>{nomeDe(p.enviadoPor, time)}</b></span>}
+    </div>
+  );
+}
+
+function CartaoPrompt({ p, time, doTime, favorito, aoFavoritar, children }) {
+  const cat = categoriaPrompt(p.categoria);
+  return (
+    <div className="card prompt-card">
+      <div className="card-h">
+        <div className="t" style={{ textTransform: "none", fontSize: "0.9rem", color: "var(--text)" }}>
+          {p.titulo}
+        </div>
+        <div className="a">
+          <button
+            className={"btn sm ghost prompt-estrela" + (favorito ? " on" : "")}
+            type="button"
+            title={favorito ? "Tirar dos favoritos" : "Favoritar"}
+            aria-pressed={favorito}
+            onClick={aoFavoritar}
+          >
+            {favorito ? "★" : "☆"}
+          </button>
+        </div>
+      </div>
+      <div className="prompt-linha">
+        <span className="tag" style={{ borderColor: cat.cor, color: cat.cor }}>
+          {cat.label}
+        </span>
+        {(p.ferramenta || p.modelo) && (
+          <span className="prompt-onde">
+            ▷ {p.ferramenta}
+            {p.modelo ? " · " + p.modelo : ""}
+          </span>
+        )}
+      </div>
+      <div className="note" style={{ marginTop: 10, maxHeight: 120, overflow: "hidden" }}>
+        {p.texto}
+      </div>
+      <Autoria p={p} time={time} doTime={doTime} />
+      <div className="midia-acoes" style={{ marginTop: 10 }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function Prompts({ busca }) {
-  const estado = useEstado();
-  const compartilhado = useCompartilhado();
   const auth = useAuth();
+  const email = auth.perfil?.email || "";
+  const compartilhado = useCompartilhado();
+  const { meus, favoritos, carregando, erro } = usePrompts();
+  const podeFazer = usePode();
+  const [aba, setAba] = useState("meus");
+  const [cat, setCat] = useState("");
+  const [time, setTime] = useState([]);
   const [editando, setEditando] = useState(null);
   const [criando, setCriando] = useState(false);
   const [excluindo, setExcluindo] = useState(null);
+  const [enviando, setEnviando] = useState(null);
   const [copiado, setCopiado] = useState("");
-  const [bibliotecaAberta, setBibliotecaAberta] = useState(false);
   const [publicado, setPublicado] = useState("");
-  const podeFazer = usePode();
+  const [falha, setFalha] = useState("");
 
-  /* Publicar um titulo que ja esta na biblioteca e ATUALIZAR o que esta
-     la -- e para o banco isso e um UPDATE, que exige "editar", nao so
-     "publicar". Sem conferir aqui, o botao apareceria e o banco recusaria
-     com uma mensagem que nao explica o motivo. */
+  useEffect(() => {
+    pessoas().then(setTime);
+  }, []);
+
+  const biblioteca = compartilhado.biblioteca || [];
+  const favoritosDoTime = biblioteca.filter((b) => favoritos.includes(b.id));
+
+  /* Publicar um título que já está na biblioteca é ATUALIZAR o que está
+     lá — para o banco é um UPDATE, que exige "editar", não só "publicar". */
   function podePublicar(p) {
-    const jaExiste = (compartilhado.biblioteca || []).some(
-      (b) => normaliza(b.titulo) === normaliza(p.titulo)
-    );
+    const jaExiste = biblioteca.some((b) => normaliza(b.titulo) === normaliza(p.titulo));
     return jaExiste ? podeFazer("prompts", "editar") : podeFazer("prompts", "publicar");
   }
 
-  /* Publicar manda uma copia para o balcao comum. Republicar o mesmo
-     prompt atualiza o que esta la em vez de criar um segundo igual. */
+  async function rodar(promessa) {
+    const r = await promessa;
+    if (!r.ok) setFalha(r.erro);
+    return r.ok;
+  }
+
   async function publicar(p) {
-    const r = await publicarPrompt(p, auth.perfil?.email || "");
-    if (!r.ok) { alert(r.erro); return; }
+    if (!(await rodar(publicarPrompt(p, p.criadoPor || email)))) return;
     setPublicado(p.id);
     setTimeout(() => setPublicado(""), 1800);
   }
-
-  const lista = estado.prompts
-    .filter((p) =>
-      estado.filtroPromptCat ? (p.categoria || "outro") === estado.filtroPromptCat : true
-    )
-    .filter((p) =>
-      busca
-        ? (p.titulo + " " + p.texto + " " + (p.tags || []).join(" ") + " " +
-           (p.ferramenta || "") + " " + (p.modelo || ""))
-            .toLowerCase()
-            .includes(busca.toLowerCase())
-        : true
-    );
 
   async function copiar(p) {
     try {
@@ -296,155 +295,140 @@ export default function Prompts({ busca }) {
       setCopiado(p.id);
       setTimeout(() => setCopiado(""), 1600);
     } catch {
-      alert("Não consegui copiar para a área de transferência");
+      setFalha("Não consegui copiar para a área de transferência.");
     }
   }
 
+  const bate = (p) =>
+    (cat ? (p.categoria || "outro") === cat : true) &&
+    (busca
+      ? (p.titulo + " " + p.texto + " " + (p.tags || []).join(" ") + " " + (p.ferramenta || "") + " " + (p.modelo || ""))
+          .toLowerCase()
+          .includes(busca.toLowerCase())
+      : true);
+
+  /* Na aba da pessoa: favoritos primeiro (os dela e os do time), depois o
+     resto dos dela. */
+  const daAba =
+    aba === "meus"
+      ? [
+          ...meus.filter((p) => p.favorito).map((p) => ({ p, doTime: false })),
+          ...favoritosDoTime.map((p) => ({ p, doTime: true })),
+          ...meus.filter((p) => !p.favorito).map((p) => ({ p, doTime: false })),
+        ]
+      : biblioteca.map((p) => ({ p, doTime: true }));
+  const lista = daAba.filter(({ p }) => bate(p));
+  const contagem = (k) => daAba.filter(({ p }) => (p.categoria || "outro") === k).length;
+
   return (
     <>
-      <div className="chips">
-        <button
-          className={"chip" + (!estado.filtroPromptCat ? " on" : "")}
-          type="button"
-          onClick={() => alterar({ filtroPromptCat: "" })}
-        >
-          Todos
-        </button>
-        {CATEGORIAS_PROMPT.map((cat) => {
-          const n = estado.prompts.filter(
-            (p) => (p.categoria || "outro") === cat.key
-          ).length;
-          if (!n) return null;
-          return (
-            <button
-              key={cat.key}
-              type="button"
-              className={"chip" + (estado.filtroPromptCat === cat.key ? " on" : "")}
-              onClick={() =>
-                alterar({
-                  filtroPromptCat:
-                    estado.filtroPromptCat === cat.key ? "" : cat.key,
-                })
-              }
-            >
-              <span className="dot" style={{ background: cat.cor }} />
-              <span>
-                {cat.label} ({n})
-              </span>
-            </button>
-          );
-        })}
-        <button
-          className="btn sm"
-          type="button"
-          style={{ marginLeft: "auto" }}
-          onClick={() => setBibliotecaAberta(true)}
-        >
-          Biblioteca ({(compartilhado.biblioteca || []).length})
-        </button>
-        <button className="btn primary sm" type="button" onClick={() => setCriando(true)}>
+      <div className="chips" style={{ alignItems: "center" }}>
+        <div className="seg">
+          <button type="button" className={aba === "meus" ? "on" : ""} onClick={() => setAba("meus")}>
+            Meus prompts ({meus.length + favoritosDoTime.length})
+          </button>
+          <button type="button" className={aba === "time" ? "on" : ""} onClick={() => setAba("time")}>
+            Biblioteca do time ({biblioteca.length})
+          </button>
+        </div>
+        <button className="btn primary sm" type="button" style={{ marginLeft: "auto" }} onClick={() => setCriando(true)}>
           ＋ Novo prompt
         </button>
       </div>
 
-      {!lista.length ? (
+      <div className="chips" style={{ marginTop: 10 }}>
+        <button className={"chip" + (!cat ? " on" : "")} type="button" onClick={() => setCat("")}>
+          Todos
+        </button>
+        {CATEGORIAS_PROMPT.map((c) => {
+          const n = contagem(c.key);
+          if (!n) return null;
+          return (
+            <button
+              key={c.key}
+              type="button"
+              className={"chip" + (cat === c.key ? " on" : "")}
+              onClick={() => setCat(cat === c.key ? "" : c.key)}
+            >
+              <span className="dot" style={{ background: c.cor }} />
+              <span>
+                {c.label} ({n})
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {(erro || falha) && (
+        <div className="banner" style={{ borderColor: "var(--danger)" }}>
+          {erro || falha}
+        </div>
+      )}
+
+      {carregando && aba === "meus" ? (
+        <div className="empty">Carregando…</div>
+      ) : !lista.length ? (
         <div className="empty">
-          {busca
-            ? `Nada encontrado para “${busca}”.`
-            : "Nenhum prompt salvo ainda."}
+          {busca || cat
+            ? "Nada encontrado."
+            : aba === "meus"
+            ? "Nenhum prompt ainda."
+            : "A biblioteca do time está vazia."}
         </div>
       ) : (
         <div className="grid g-cards">
-          {lista.map((p) => {
-            const cat = categoriaPrompt(p.categoria);
-            return (
-              <div className="card" key={p.id}>
-                <div className="card-h">
-                  <div className="t" style={{ textTransform: "none", fontSize: "0.9rem", color: "var(--text)" }}>
-                    {p.titulo}
-                  </div>
-                  <div className="a">
-                    <button
-                      className="btn sm ghost"
-                      type="button"
-                      title="Favorito"
-                      onClick={() =>
-                        alterar((e) => ({
-                          prompts: e.prompts.map((x) =>
-                            x.id === p.id ? { ...x, favorito: !x.favorito } : x
-                          ),
-                        }))
-                      }
-                    >
-                      {p.favorito ? "★" : "☆"}
-                    </button>
-                  </div>
-                </div>
-
-                <span className="tag" style={{ borderColor: cat.cor, color: cat.cor }}>
-                  {cat.label}
-                </span>
-
-                {/* onde usar: é o que se precisa bater o olho e saber */}
-                {(p.ferramenta || p.modelo) && (
-                  <div className="sub">
-                    ▷ {p.ferramenta}
-                    {p.modelo ? " · " + p.modelo : ""}
-                  </div>
+          {lista.map(({ p, doTime }) =>
+            doTime ? (
+              <CartaoPrompt
+                key={"t" + p.id}
+                p={p}
+                time={time}
+                doTime
+                favorito={favoritos.includes(p.id)}
+                aoFavoritar={() => rodar(favoritarDoTime(p.id, email, !favoritos.includes(p.id)))}
+              >
+                <button className="btn sm" type="button" onClick={() => copiar(p)}>
+                  {copiado === p.id ? "copiado ✓" : "Copiar"}
+                </button>
+              </CartaoPrompt>
+            ) : (
+              <CartaoPrompt
+                key={p.id}
+                p={p}
+                time={time}
+                favorito={p.favorito}
+                aoFavoritar={() => rodar(alternarFavorito(p))}
+              >
+                <button className="btn sm" type="button" onClick={() => copiar(p)}>
+                  {copiado === p.id ? "copiado ✓" : "Copiar"}
+                </button>
+                <button className="btn sm ghost" type="button" onClick={() => setEnviando(p)}>
+                  Enviar
+                </button>
+                {podePublicar(p) && (
+                  <button className="btn sm ghost" type="button" onClick={() => publicar(p)}>
+                    {publicado === p.id ? "publicado ✓" : "Publicar no time"}
+                  </button>
                 )}
-
-                <div className="note" style={{ marginTop: 10, maxHeight: 120, overflow: "hidden" }}>
-                  {p.texto}
-                </div>
-
-                <div className="midia-acoes" style={{ marginTop: 12 }}>
-                  <button className="btn sm" type="button" onClick={() => copiar(p)}>
-                    {copiado === p.id ? "copiado ✓" : "Copiar"}
-                  </button>
-                  {podePublicar(p) && (
-                    <button
-                      className="btn sm ghost"
-                      type="button"
-                      title="Mandar uma copia para a biblioteca do time"
-                      onClick={() => publicar(p)}
-                    >
-                      {publicado === p.id ? "publicado" : "Publicar"}
-                    </button>
-                  )}
-                  <button
-                    className="btn sm ghost"
-                    type="button"
-                    onClick={() => setEditando(p)}
-                  >
-                    Editar
-                  </button>
-                  <button
-                    className="btn sm ghost danger"
-                    type="button"
-                    onClick={() => setExcluindo(p)}
-                  >
-                    ✕
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+                <button className="btn sm ghost" type="button" onClick={() => setEditando(p)}>
+                  Editar
+                </button>
+                <button className="btn sm ghost danger" type="button" onClick={() => setExcluindo(p)}>
+                  ✕
+                </button>
+              </CartaoPrompt>
+            )
+          )}
         </div>
       )}
 
-      {bibliotecaAberta && <Biblioteca aoFechar={() => setBibliotecaAberta(false)} />}
       {criando && <FormPrompt aoFechar={() => setCriando(false)} />}
-      {editando && (
-        <FormPrompt inicial={editando} aoFechar={() => setEditando(null)} />
-      )}
+      {editando && <FormPrompt inicial={editando} aoFechar={() => setEditando(null)} />}
+      {enviando && <EnviarPrompt prompt={enviando} time={time} aoFechar={() => setEnviando(null)} />}
       {excluindo && (
         <Confirmar
           mensagem={`Excluir o prompt “${excluindo.titulo}”? Isso não tem volta.`}
-          aoConfirmar={() =>
-            alterar((e) => ({
-              prompts: e.prompts.filter((x) => x.id !== excluindo.id),
-            }))
-          }
+          aoConfirmar={() => rodar(excluirPrompt(excluindo.id))}
           aoFechar={() => setExcluindo(null)}
         />
       )}

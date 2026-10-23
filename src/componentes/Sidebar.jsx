@@ -2,12 +2,14 @@ import { useEstado, statusInfo } from "../lib/estado.js";
 import { useCompartilhado } from "../lib/compartilhado.js";
 import { useCentral } from "../lib/central.js";
 import { useMenu } from "../lib/menu.js";
+import { usePrompts } from "../lib/prompts.js";
 import simbolo from "../assets/simbolo-guipa.png";
 
 export default function Sidebar({ secao, aoTrocar }) {
   const estado = useEstado();
   const compartilhado = useCompartilhado();
   const central = useCentral();
+  const prompts = usePrompts();
   /* Abas permitidas, na ordem que a pessoa escolheu. Configurações
      aparece para todo mundo por causa da ordem do menu; o resto dela
      (permissões, Drive…) só admin vê. */
@@ -19,7 +21,7 @@ export default function Sidebar({ secao, aoTrocar }) {
     if (key === "demandas")
       return estado.demandas.filter((d) => !statusInfo(estado, d.status).concluida)
         .length;
-    if (key === "prompts") return estado.prompts.length;
+    if (key === "prompts") return prompts.meus.length + prompts.favoritos.length;
     if (key === "marcas") return (compartilhado.marcas || []).length;
     if (key === "central") return central.materiais.length + central.guias.length + central.imagens.length;
     return 0;

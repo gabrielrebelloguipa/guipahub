@@ -16,6 +16,8 @@ import { restaurarSessao, tokenValido, renovarAcessoDrive } from "./lib/auth.js"
 import { verificarAcesso } from "./lib/drive.js";
 import { iniciar as iniciarCompartilhado } from "./lib/compartilhado.js";
 import { iniciarCentral } from "./lib/central.js";
+import { iniciarPrompts, migrarLocais } from "./lib/prompts.js";
+import { pegarEstado, alterar } from "./lib/estado.js";
 import {
   carregar as carregarPermissoes,
   ouvir as ouvirPermissoes,
@@ -35,6 +37,10 @@ const TITULOS = {
   config: ["Configurações", ""],
   calculadora: ["Calculadora comercial", ""],
 };
+
+/* Fora do componente: o StrictMode roda o efeito duas vezes, e subir os
+   mesmos prompts duas vezes duplicaria tudo. */
+let migrandoPrompts = false;
 
 export default function App() {
   const auth = useAuth();
@@ -68,6 +74,7 @@ export default function App() {
     if (!auth.perfil) return;
     iniciarCompartilhado();
     iniciarCentral();
+    iniciarPrompts();
     carregarPermissoes(auth.perfil.email);
     ouvirPermissoes(auth.perfil.email);
   }, [auth.perfil?.email]);
@@ -89,6 +96,19 @@ export default function App() {
        desenhado as pastas. Fazer isso aqui, no login, punia quem nem ia
        usar a aba: 30 chamadas competindo com o carregamento da tela. */
   }, [confDrive.raizId, confDrive.raizNome]);
+
+  /* Prompts que ainda estejam no navegador (versão antiga) sobem uma vez
+     para o banco, como da pessoa logada, e saem do local. */
+  useEffect(() => {
+    const email = auth.perfil?.email;
+    const locais = pegarEstado().prompts || [];
+    if (!email || !locais.length || migrandoPrompts) return;
+    migrandoPrompts = true;
+    migrarLocais(locais, email).then((r) => {
+      if (r.ok) alterar({ prompts: [] });
+      migrandoPrompts = false;
+    });
+  }, [auth.perfil?.email]);
 
   if (!auth.perfil) return <Login />;
 

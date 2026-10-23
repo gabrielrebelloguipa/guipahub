@@ -208,6 +208,8 @@ function ouvirRemoto() {
          salva a cada tecla. Recarregar tudo por causa dele dobraria as
          leituras sem mudar nada que o quadro mostra. Quem precisa do
          historico (o cartao aberto) escuta pelo proprio canal. */
+      /* Prompts pessoais e favoritos têm o próprio canal (prompts.js). */
+      if (msg.table === "prompts" || msg.table === "prompts_favoritos") return;
       if (msg.table === "cartoes_eventos") {
         ouvintesHistorico.forEach((fn) => fn(msg.new || msg.old));
         return;
