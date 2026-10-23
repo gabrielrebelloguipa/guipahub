@@ -179,7 +179,10 @@ export async function carregar(meuEmail) {
     definir({ carregando: false });
     return;
   }
-  definir({ carregando: true, erro: "" });
+  /* "Carregando" só na primeira vez. Recarga depois de uma gravação (ou
+     de um aviso em tempo real) troca os dados por baixo, sem a tela de
+     Configurações piscar e perder o que estava mostrando. */
+  definir(estado.eu ? { erro: "" } : { carregando: true, erro: "" });
   try {
     const [rp, rc] = await Promise.all([
       supabase.from("perfis").select("*").order("email"),

@@ -61,19 +61,31 @@ export default function Topbar({ busca, aoBuscar }) {
               <div className="n">{auth.perfil?.nome || "Sem sessão"}</div>
               <div className="e">{auth.perfil?.email || "—"}</div>
             </div>
-            <div className="menu-rotulo">Tema</div>
-            {TEMAS.map(([chave, rotulo, icone]) => (
-              <button
-                key={chave}
-                className="menu-item"
-                type="button"
-                onClick={() => definirTema(chave)}
+            <div className="menu-tema">
+              <span>Tema</span>
+              <div
+                className="tema-slide"
+                role="radiogroup"
+                aria-label="Tema"
+                style={{ "--pos": Math.max(0, TEMAS.findIndex(([k]) => k === tema)) }}
               >
-                <span className="mi">{icone}</span>
-                <span>{rotulo}</span>
-                {tema === chave && <span className="chk">✓</span>}
-              </button>
-            ))}
+                <span className="tema-bola" aria-hidden="true" />
+                {TEMAS.map(([chave, rotulo, icone]) => (
+                  <button
+                    key={chave}
+                    type="button"
+                    role="radio"
+                    aria-checked={tema === chave}
+                    aria-label={rotulo}
+                    title={rotulo}
+                    className={tema === chave ? "on" : ""}
+                    onClick={() => definirTema(chave)}
+                  >
+                    {icone}
+                  </button>
+                ))}
+              </div>
+            </div>
             {auth.perfil && (
               <>
                 <div className="menu-sep" />
