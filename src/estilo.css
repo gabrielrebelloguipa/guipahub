@@ -859,11 +859,12 @@
     border: 1px solid var(--border); border-radius: var(--radius);
     padding: 20px clamp(12px, 1.4vw, 24px) 18px;
   }
+  /* Dados à esquerda, alinhados com a borda da tabela; logo à direita. */
   .calc-topo {
-    display: grid; grid-template-columns: auto 1fr 1fr; gap: 10px 28px;
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 10px 32px;
     align-items: start; margin-bottom: 18px;
   }
-  .calc-marca { height: 34px; width: auto; display: block; margin-top: 2px; }
+  .calc-marca { height: 34px; width: auto; display: block; margin-top: 2px; justify-self: end; }
   /* Rótulo numa coluna, campo na outra: os campos começam todos na mesma
      linha vertical, em vez de cada um depois do tamanho do seu rótulo. */
   .calc-cab {
@@ -908,14 +909,12 @@
   .calc-acoes { text-align: center !important; }
   .calc-acoes .btn { padding: 2px 5px; display: flex; margin: 1px auto; }
 
-  /* Campo editável tem cara de campo: fundo laranja-claro e borda, para
-     quem monta a proposta ver de cara o que pode mudar (período, motos,
-     desconto…) sem precisar clicar para descobrir. O que é conta fica
-     como texto puro. Na exportação de imagem os campos viram texto, então
-     a proposta que vai para o cliente não leva esse destaque. */
+  /* Campo editável marcado de leve: só um sublinhado tracejado laranja,
+     que vira fundo claro ao passar o mouse. Dá para ver o que muda sem
+     a folha parecer formulário. Na imagem exportada viram texto puro. */
   .calc-in {
     font: inherit; font-variant-numeric: tabular-nums; color: #1d1d1b; font-weight: 600;
-    background: #fff1e4; border: 1px solid #f5c294; border-radius: 5px;
+    background: transparent; border: 0; border-bottom: 1.5px dashed #f2a766; border-radius: 3px 3px 0 0;
     padding: 3px 5px; width: 100%; min-width: 56px; text-align: center;
   }
   /* Na tabela o campo tem largura de campo, centrado na coluna — não
@@ -926,8 +925,8 @@
   .calc-tab td:first-child .calc-in.txt { min-width: 56px; max-width: 120px; margin: 0; }
   select.calc-in { min-width: 88px; text-align: left; cursor: pointer; }
   .calc-tab select.calc-in { max-width: 104px; }
-  .calc-in:hover { border-color: #f76e00; background: #ffe6cf; }
-  .calc-in:focus { outline: none; border-color: #f76e00; background: #ffffff; box-shadow: 0 0 0 2px #fcd3ae; }
+  .calc-in:hover { border-bottom-color: #f76e00; background: #fff4ea; }
+  .calc-in:focus { outline: none; border-bottom: 1.5px solid #f76e00; background: #fff4ea; }
   .calc-tab .calc-ativos .calc-in { display: inline-block; width: 44px; min-width: 44px; margin: 0; }
   .calc-cab-item .calc-in.txt { text-align: left; font-weight: 500; }
   .calc-notas {
@@ -1148,3 +1147,10 @@
   .ordem-nome { font-size: 0.9rem; font-weight: 600; }
   .ordem-setas { margin-left: auto; display: flex; gap: 2px; }
   .ordem-setas .btn { padding: 3px 9px; }
+
+  /* ---------- meu perfil ---------- */
+  .perfil-card { max-width: 520px; display: flex; flex-direction: column; gap: 10px; }
+  .perfil-linha { display: grid; grid-template-columns: 90px minmax(0, 1fr) auto; align-items: center; gap: 10px; font-size: 0.88rem; }
+  .perfil-linha > span:first-child { color: var(--text-dim); font-size: 0.8rem; }
+  .perfil-estado { font-size: 0.74rem; color: var(--text-dim); }
+  .perfil-estado.ok { color: var(--ok); }

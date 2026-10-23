@@ -282,6 +282,19 @@ export function salvarPermissoesPadrao(permissoes, quem) {
   return gravarConfig("permissoes_padrao", permissoes, quem);
 }
 
+/* O próprio telefone, que sai no cabeçalho da proposta. Nome e e-mail
+   não se editam: vêm da conta Google do login. */
+export async function salvarMeuTelefone(telefone) {
+  if (!estado.eu?.id) return { ok: false, erro: "Perfil ainda não carregou." };
+  const { error } = await supabase
+    .from("perfis")
+    .update({ telefone: String(telefone || "").trim() })
+    .eq("id", estado.eu.id);
+  if (error) return { ok: false, erro: explicarErro(error) };
+  await carregar(estado.eu?.email);
+  return { ok: true };
+}
+
 export async function definirAdmin(perfilId, admin) {
   const { error } = await supabase.from("perfis").update({ admin }).eq("id", perfilId);
   if (error) return { ok: false, erro: explicarErro(error) };

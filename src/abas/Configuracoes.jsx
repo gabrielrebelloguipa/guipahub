@@ -11,6 +11,7 @@ import {
   salvarResponsaveis,
   definirAdmin,
   salvarDrive,
+  salvarMeuTelefone,
 } from "../lib/permissoes.js";
 import { buscarPastas } from "../lib/drive.js";
 import { auditoriaComentarios } from "../lib/compartilhado.js";
@@ -533,6 +534,55 @@ function ConfigDrive({ ehAdmin, meuEmail }) {
 /* Mesma ideia da Central: sub-aba escondia metade da tela atras de um
    clique, e quem abre Configuracoes costuma mexer nas duas coisas na
    mesma sentada. Empilhado, as duas estao a uma rolagem. */
+/* ---------- meu perfil ---------- */
+
+function MeuPerfil() {
+  const auth = useAuth();
+  const { eu } = usePermissoes();
+  const [tel, setTel] = useState(eu?.telefone || "");
+  const [estado, setEstado] = useState(""); // "" | "salvando" | "salvo" | erro
+  useEffect(() => setTel(eu?.telefone || ""), [eu?.telefone]);
+
+  async function salvar() {
+    if (tel.trim() === (eu?.telefone || "")) return;
+    setEstado("salvando");
+    const r = await salvarMeuTelefone(tel);
+    setEstado(r.ok ? "salvo" : r.erro);
+  }
+
+  return (
+    <div className="card perfil-card">
+      <div className="perfil-linha">
+        <span>Nome</span>
+        <b>{auth.perfil?.nome || "—"}</b>
+      </div>
+      <div className="perfil-linha">
+        <span>E-mail</span>
+        <b>{auth.perfil?.email || "—"}</b>
+      </div>
+      <label className="perfil-linha">
+        <span>Telefone</span>
+        <input
+          className="campo-resp"
+          value={tel}
+          placeholder="+55 (11) 9 0000-0000"
+          onChange={(e) => {
+            setTel(e.target.value);
+            setEstado("");
+          }}
+          onBlur={salvar}
+          onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+        />
+        {estado === "salvando" && <span className="perfil-estado">salvando…</span>}
+        {estado === "salvo" && <span className="perfil-estado ok">salvo</span>}
+      </label>
+      {estado && estado !== "salvando" && estado !== "salvo" && (
+        <div className="banner" style={{ borderColor: "var(--danger)", marginTop: 10 }}>{estado}</div>
+      )}
+    </div>
+  );
+}
+
 /* ---------- ordem do menu ---------- */
 
 /* Cada um põe no topo o que mais usa. Arrastar a linha ou usar as setas;
@@ -653,18 +703,22 @@ export default function Configuracoes() {
   /* Quem não é admin só tem a ordem do menu para mexer aqui. Permissões,
      responsáveis, auditoria e Drive nem aparecem — e o banco recusa a
      escrita de quem não é admin de qualquer jeito. */
-  if (!ehAdmin)
-    return (
+  const pessoais = (
+    <>
+      <Secao titulo="Meu perfil">
+        <MeuPerfil />
+      </Secao>
       <Secao titulo="Ordem do menu">
         <OrdemMenu />
       </Secao>
-    );
+    </>
+  );
+
+  if (!ehAdmin) return pessoais;
 
   return (
     <>
-      <Secao titulo="Ordem do menu">
-        <OrdemMenu />
-      </Secao>
+      {pessoais}
 
       <Secao titulo="Permissões de usuário">
         <Permissoes ehAdmin={ehAdmin} meuEmail={auth.perfil?.email} />

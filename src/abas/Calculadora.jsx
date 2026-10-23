@@ -12,6 +12,7 @@ import {
 } from "../lib/calculo.js";
 import { exportarXlsx, exportarImagem } from "../lib/exporta.js";
 import logoGuipa from "../assets/logo-guipa.png";
+import { usePermissoes } from "../lib/permissoes.js";
 
 /* A proposta em andamento fica guardada no navegador de quem está
    montando: fechar a aba no meio de uma negociação não pode apagar o que
@@ -93,11 +94,18 @@ export default function Calculadora() {
   const [cab, setCab] = useState(
     guardado?.cab || {
       agencia: "", cliente: "", campanha: "", periodo: "",
-      atendimento: auth.perfil?.nome || "",
-      email: auth.perfil?.email || "",
-      telefone: "+55 (11) ",
     }
   );
+  /* Quem atende sai do login (nome e e-mail, fixos) e do perfil
+     (telefone, editável em Configurações › Meu perfil). Não se digita na
+     proposta, e o que tenha ficado guardado de antes é ignorado. */
+  const { eu } = usePermissoes();
+  const cabFinal = {
+    ...cab,
+    atendimento: auth.perfil?.nome || "",
+    email: auth.perfil?.email || "",
+    telefone: eu?.telefone || "",
+  };
   const [pracas, setPracas] = useState(guardado?.pracas || PRACAS_PADRAO);
   const [especiais, setEspeciais] = useState(guardado?.especiais || LINHAS_ESPECIAIS_PADRAO);
   /* Premissas são fixas: os números da tabela de preços vigente. Não
@@ -132,14 +140,14 @@ export default function Calculadora() {
     setExportando(tipo);
     try {
       if (tipo === "xlsx") {
-        await exportarXlsx({ modo, cab, pracas, especiais, premissas, logoUrl: logoGuipa });
+        await exportarXlsx({ modo, cab: cabFinal, pracas, especiais, premissas, logoUrl: logoGuipa });
       } else {
         /* Troca os campos por texto, espera o navegador redesenhar, e só
            então fotografa. Sem a espera, a imagem sairia com as caixas
            de digitação no meio da proposta. */
         setCapturando(true);
         await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-        await exportarImagem(folha.current, { cab, modo });
+        await exportarImagem(folha.current, { cab: cabFinal, modo });
       }
     } catch (e) {
       setErro("Não consegui exportar: " + (e?.message || "erro"));
@@ -184,7 +192,6 @@ export default function Calculadora() {
       <div className="calc-rola" style={{ marginTop: 12 }}>
         <div className={"calc-folha" + (capturando ? " capturando" : "")} ref={folha}>
           <div className="calc-topo">
-            <img className="calc-marca" src={logoGuipa} alt="GUIPA" />
             <div className="calc-cab">
               {[
                 ["agencia", "Agência"], ["cliente", "Cliente"], ["campanha", "Campanha"], ["periodo", "Período"],
@@ -199,12 +206,13 @@ export default function Calculadora() {
               {[
                 ["atendimento", "Atendimento Comercial"], ["email", "E-mail"], ["telefone", "Telefone"],
               ].map(([k, rot]) => (
-                <label key={k} className="calc-cab-item">
+                <div key={k} className="calc-cab-item">
                   <span>{rot}:</span>
-                  <CampoTxt valor={cab[k]} aoMudar={mudaCab(k)} capturando={capturando} />
-                </label>
+                  <span className="calc-val">{cabFinal[k]}</span>
+                </div>
               ))}
             </div>
+            <img className="calc-marca" src={logoGuipa} alt="GUIPA" />
           </div>
 
           {modo === "circuito" ? (
