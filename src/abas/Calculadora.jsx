@@ -99,8 +99,11 @@ export default function Calculadora() {
   );
   const [pracas, setPracas] = useState(guardado?.pracas || PRACAS_PADRAO);
   const [especiais, setEspeciais] = useState(guardado?.especiais || LINHAS_ESPECIAIS_PADRAO);
-  const [premissas, setPremissas] = useState({ ...PREMISSAS_PADRAO, ...(guardado?.premissas || {}) });
-  const [verPremissas, setVerPremissas] = useState(false);
+  /* Premissas são fixas: os números da tabela de preços vigente. Não
+     ficam editáveis na tela, e um valor alterado que tenha sobrado no
+     navegador de alguém é ignorado. Reajuste da tabela = mudar
+     PREMISSAS_PADRAO no código. */
+  const premissas = PREMISSAS_PADRAO;
   const [capturando, setCapturando] = useState(false);
   const [exportando, setExportando] = useState("");
   const [erro, setErro] = useState("");
@@ -108,11 +111,11 @@ export default function Calculadora() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(CHAVE, JSON.stringify({ modo, cab, pracas, especiais, premissas }));
+      localStorage.setItem(CHAVE, JSON.stringify({ modo, cab, pracas, especiais }));
     } catch {
       /* sem espaço: a proposta vale só enquanto a aba estiver aberta */
     }
-  }, [modo, cab, pracas, especiais, premissas]);
+  }, [modo, cab, pracas, especiais]);
 
   const circ = calcularCircuito(pracas, premissas);
   const esp = calcularEspeciais(especiais, premissas);
@@ -395,48 +398,7 @@ export default function Calculadora() {
             ＋ Linha
           </button>
         )}
-        <button className="btn sm ghost" type="button" onClick={() => setVerPremissas((v) => !v)}>
-          {verPremissas ? "Esconder premissas" : "Premissas da tabela"}
-        </button>
       </div>
-
-      {verPremissas && (
-        <div className="card" style={{ marginTop: 10 }}>
-          <div className="card-h">
-            <div className="t">Premissas da tabela de preços</div>
-            <div className="a">
-              <button className="btn sm ghost" type="button" onClick={() => setPremissas(PREMISSAS_PADRAO)}>
-                Voltar aos valores da tabela
-              </button>
-            </div>
-          </div>
-          <div className="sub" style={{ marginBottom: 12 }}>
-            Os números fixos da planilha. Mudam no reajuste da tabela (válida até
-            31/12/2026) — e valem também para o Excel exportado.
-          </div>
-          <div className="calc-premissas">
-            {[
-              ["liquidoSobreNegociado", "Líquido sobre negociado (comissão de agência)", "%"],
-              ["slot2Insercoes", "Slot 1:2 — inserções em relação ao 1:1", "%"],
-              ["slot2Tabela", "Slot 1:2 — valor de tabela em relação ao 1:1", "%"],
-              ["slot2Impactos", "Slot 1:2 — impactos em relação ao 1:1", "%"],
-              ["facesPorMoto", "Faces por moto", ""],
-              ["insercoesDiaPorMoto", "Inserções por dia, por moto", ""],
-              ["tabelaDiaPorMoto", "Valor de tabela por dia, por moto (R$)", ""],
-            ].map(([k, rot, unid]) => (
-              <label key={k} className="calc-premissa">
-                <span>{rot}</span>
-                <CampoNum
-                  valor={unid === "%" ? Math.round(premissas[k] * 1000) / 10 : premissas[k]}
-                  aoMudar={(v) => setPremissas((p) => ({ ...p, [k]: unid === "%" ? v / 100 : v }))}
-                  sufixo={unid}
-                  formato={(v) => fmt.num(v)}
-                />
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
     </>
   );
 }

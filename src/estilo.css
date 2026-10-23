@@ -941,12 +941,6 @@
   }
   .calc-notas li:first-child { font-weight: 700; color: #1d1d1b; }
 
-  .calc-premissas { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px 18px; }
-  .calc-premissa { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 0.82rem; color: var(--text); }
-  .calc-premissa .calc-in {
-    color: var(--text); border-color: var(--border); background: var(--bg); width: 100px;
-  }
-
   /* ---------- responsáveis ---------- */
   .campo-resp {
     background: var(--bg); color: var(--text); border: 1px solid var(--border);
