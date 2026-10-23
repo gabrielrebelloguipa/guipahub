@@ -1,8 +1,9 @@
 /* Estado da aplicação que mora no navegador de cada pessoa.
 
-   Atenção ao alcance: isto é localStorage, por navegador. O que cada um
-   cadastra aqui não aparece para mais ninguém. Só a aba Clientes é
-   compartilhada de verdade, porque ela não guarda nada — lê o Drive.
+   Atenção ao alcance: isto é localStorage, por navegador — e separado
+   POR CONTA: a chave leva o e-mail de quem entrou. Duas pessoas que usam
+   o mesmo computador nunca veem o que é da outra. Antes de alguém entrar
+   (e depois de sair) o estado é o vazio da semente.
 
    Mesma forma do auth.js: uma loja observável, sem React, ligada aos
    componentes por useSyncExternalStore. */
@@ -10,6 +11,7 @@
 import { useSyncExternalStore } from "react";
 
 const CHAVE = "guipahub_v1";
+let chaveAtual = null; // CHAVE + ":" + e-mail de quem está logado
 
 /* Colunas iniciais = o fluxo de trabalho padrão do time de design.
    São só o ponto de partida: dá para renomear, reordenar, apagar e criar
@@ -81,9 +83,10 @@ export function semente() {
   };
 }
 
-function carregar() {
+function carregar(chave) {
+  if (!chave) return semente();
   try {
-    const bruto = localStorage.getItem(CHAVE);
+    const bruto = localStorage.getItem(chave);
     const base = semente();
     if (!bruto) return base;
     const salvo = JSON.parse(bruto);
@@ -96,8 +99,33 @@ function carregar() {
   }
 }
 
-let estado = carregar();
+let estado = semente();
 const ouvintes = new Set();
+
+/* Troca para o estado da conta que entrou (ou para o vazio, ao sair).
+   Uma vez só: o que a versão anterior guardava sem dono vai para quem era
+   o dono neste navegador — ou para quem entrar primeiro, se nunca houve
+   dono registrado — e a cópia sem dono é apagada. */
+export function usarConta(email) {
+  const e = String(email || "").toLowerCase();
+  const chave = e ? CHAVE + ":" + e : null;
+  if (chave === chaveAtual) return;
+  chaveAtual = chave;
+  if (chave) {
+    try {
+      const legado = localStorage.getItem(CHAVE);
+      const dono = localStorage.getItem("guipahub_kanban_dono") || "";
+      if (legado && (!dono || dono === e)) {
+        if (!localStorage.getItem(chave)) localStorage.setItem(chave, legado);
+        localStorage.removeItem(CHAVE);
+      }
+    } catch {
+      /* sem localStorage: segue com o vazio */
+    }
+  }
+  estado = carregar(chave);
+  avisar();
+}
 
 function avisar() {
   ouvintes.forEach((fn) => fn());
@@ -117,8 +145,9 @@ let avisouEstouro = false;
    megabytes, e engolir o erro faria perder trabalho sem avisar. */
 export function alterar(patch) {
   estado = { ...estado, ...(typeof patch === "function" ? patch(estado) : patch) };
+  if (!chaveAtual) return avisar();
   try {
-    localStorage.setItem(CHAVE, JSON.stringify(estado));
+    localStorage.setItem(chaveAtual, JSON.stringify(estado));
     avisouEstouro = false;
   } catch (e) {
     const cheio =
@@ -142,7 +171,7 @@ export function alterar(patch) {
 export function limparTudo() {
   estado = semente();
   try {
-    localStorage.setItem(CHAVE, JSON.stringify(estado));
+    if (chaveAtual) localStorage.setItem(chaveAtual, JSON.stringify(estado));
   } catch {
     /* se não salvou, ao menos a sessão atual já está limpa */
   }

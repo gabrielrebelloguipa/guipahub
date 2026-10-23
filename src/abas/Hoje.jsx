@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useEstado, alterar, uid, statusInfo } from "../lib/estado.js";
+import { useEstado, alterar, uid } from "../lib/estado.js";
 import { fmtData, diasAte, categoriaPrompt } from "../lib/constantes.js";
 import Modal from "../componentes/Modal.jsx";
 import { usePrompts } from "../lib/prompts.js";
-import { useCompartilhado as useCompartilhadoHoje } from "../lib/compartilhado.js";
+import { useCompartilhado as useCompartilhadoHoje, meuQuadro, infoDaLista, REMOTO } from "../lib/compartilhado.js";
 
 function FormAtalho({ inicial, aoFechar }) {
   const novo = !inicial;
@@ -88,9 +88,9 @@ export default function Hoje({ aoIrPara }) {
   const [editandoAtalho, setEditandoAtalho] = useState(null);
   const [criandoAtalho, setCriandoAtalho] = useState(false);
 
-  const abertas = estado.demandas.filter(
-    (d) => !statusInfo(estado, d.status).concluida
-  );
+  /* Suas tarefas = o quadro pessoal, que mora no banco (20). */
+  const q = REMOTO ? meuQuadro(compartilhadoHoje) || { listas: [], demandas: [] } : estado;
+  const abertas = q.demandas.filter((d) => !infoDaLista(q, d.status).concluida);
 
   const prazos = abertas
     .filter((d) => {
@@ -126,8 +126,8 @@ export default function Hoje({ aoIrPara }) {
             </div>
           </div>
           <div className="stat-row">
-            {estado.listas.map((L) => {
-              const n = estado.demandas.filter((d) => d.status === L.id).length;
+            {q.listas.map((L) => {
+              const n = q.demandas.filter((d) => d.status === L.id).length;
               return (
                 <button
                   className="stat"
@@ -157,7 +157,7 @@ export default function Hoje({ aoIrPara }) {
                   <button className="row" key={d.id} onClick={() => aoIrPara("demandas")}>
                     <div
                       className="bar"
-                      style={{ background: statusInfo(estado, d.status).color }}
+                      style={{ background: infoDaLista(q, d.status).color }}
                     />
                     <div className="body">
                       <div className="ttl">{d.titulo}</div>

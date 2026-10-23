@@ -32,7 +32,7 @@ function FormPrompt({ inicial, aoFechar, aoEnviar, podePublicar }) {
   const [publicado, setPublicado] = useState(false);
 
   async function publicar() {
-    const r = await publicarPrompt(p, p.criadoPor || auth.perfil?.email || "");
+    const r = await publicarPrompt(p, auth.perfil?.email || "");
     if (!r.ok) return setErro(r.erro);
     setPublicado(true);
   }
@@ -162,7 +162,7 @@ function EnviarPrompt({ prompt, time, aoFechar }) {
   async function enviar() {
     if (!para) return;
     setEstado("enviando");
-    const r = await enviarPrompt(prompt, para, eu);
+    const r = await enviarPrompt(prompt, para);
     setEstado(r.ok ? "ok" : r.erro);
   }
 

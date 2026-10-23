@@ -20,10 +20,22 @@ import { usePermissoes } from "../lib/permissoes.js";
    do time, então não vai para o banco. */
 const CHAVE = "guipahub_calculadora_v1";
 
-function lerGuardado() {
+/* A proposta em andamento fica no navegador, separada por conta: quem
+   usa o mesmo computador não abre a proposta de outra pessoa. A versão
+   anterior guardava sem dono; vai uma vez para quem entrar. */
+function chaveDe(email) {
+  return CHAVE + ":" + String(email || "").toLowerCase();
+}
+function lerGuardado(email) {
   try {
-    const g = JSON.parse(localStorage.getItem(CHAVE) || "null");
-    return g && typeof g === "object" ? g : null;
+    const k = chaveDe(email);
+    const legado = localStorage.getItem(CHAVE);
+    if (legado) {
+      if (!localStorage.getItem(k)) localStorage.setItem(k, legado);
+      localStorage.removeItem(CHAVE);
+    }
+    const bruto = localStorage.getItem(k);
+    return bruto ? JSON.parse(bruto) : null;
   } catch {
     return null;
   }
@@ -88,7 +100,7 @@ const pct = (v) => fmt.num(Math.round((v || 0) * 1000) / 10);
 
 export default function Calculadora() {
   const auth = useAuth();
-  const guardado = lerGuardado();
+  const guardado = lerGuardado(auth.perfil?.email);
 
   const [modo, setModo] = useState(guardado?.modo || "especiais");
   const [cab, setCab] = useState(
@@ -120,7 +132,7 @@ export default function Calculadora() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(CHAVE, JSON.stringify({ modo, cab, pracas, especiais }));
+      localStorage.setItem(chaveDe(auth.perfil?.email), JSON.stringify({ modo, cab, pracas, especiais }));
     } catch {
       /* sem espaço: a proposta vale só enquanto a aba estiver aberta */
     }

@@ -113,16 +113,11 @@ export function favoritarDoTime(promptId, email, ligar) {
     : feito(supabase.from("prompts_favoritos").delete().eq("prompt_id", promptId).eq("email", email));
 }
 
-/* Manda uma cópia para o colega. Quem criou continua sendo quem
-   escreveu; quem enviou o banco carimba sozinho. */
-export async function enviarPrompt(p, para, meuEmail) {
-  const { error } = await supabase.from("prompts").insert({
-    ...paraLinha(p),
-    favorito: false,
-    dono: para,
-    criado_por: p.criadoPor || meuEmail,
-    da_biblioteca: p.daBiblioteca || null,
-  });
+/* Manda uma cópia para o colega pela função do banco (19), que só
+   aceita prompt SEU e guarda o autor original e quem enviou. Ninguém
+   escolhe autor: não é campo. */
+export async function enviarPrompt(p, para) {
+  const { error } = await supabase.rpc("enviar_prompt", { p_prompt: p.id, p_para: para });
   if (error) return { ok: false, erro: explicarErro(error) };
   return { ok: true };
 }

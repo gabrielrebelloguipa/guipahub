@@ -42,7 +42,7 @@ export const AREAS = [
   {
     key: "demandas",
     label: "Kanban",
-    acoes: ["ver", "criar", "editar", "mover", "comentar", "excluir", "excluir_outros", "colunas"],
+    acoes: ["ver", "criar", "editar", "mover", "comentar", "excluir", "excluir_outros"],
   },
   { key: "central", label: "Central Guipa", acoes: ["ver", "criar", "editar", "excluir"] },
   { key: "marcas", label: "Marcas", acoes: ["ver", "criar", "editar", "excluir"] },

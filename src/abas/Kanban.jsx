@@ -4,14 +4,16 @@ import {
   useCompartilhado,
   quadroDaMarca,
   criarQuadro,
-  apiQuadroEmpresa,
+  apiQuadro,
+  carregarQuadro,
+  meuQuadro,
   pessoas,
   nomeDe,
+  REMOTO,
 } from "../lib/compartilhado.js";
 import { useAuth } from "../lib/useAuth.js";
 import { usePode, usePermissoes, nomeDoResponsavel } from "../lib/permissoes.js";
 import Quadro, { criarApi } from "../componentes/Quadro.jsx";
-import AvisoAlcance from "../componentes/AvisoAlcance.jsx";
 import EscolheMarca from "../componentes/EscolheMarca.jsx";
 import { HistoricoQuadro } from "../componentes/Historico.jsx";
 
@@ -25,6 +27,7 @@ export default function Kanban({ busca }) {
 
   /* Permissoes valem so nos quadros de marca: o pessoal e da pessoa. */
   const podeFazer = usePode();
+  const { eu: euPerfil } = usePermissoes();
   const podeQuadro = {
     criar: podeFazer("demandas", "criar"),
     editar: podeFazer("demandas", "editar"),
@@ -34,17 +37,18 @@ export default function Kanban({ busca }) {
     excluir: podeFazer("demandas", "excluir"),
     excluirOutros: podeFazer("demandas", "excluir_outros"),
     eu: (auth.perfil?.email || "").toLowerCase(),
-    colunas: podeFazer("demandas", "colunas"),
+    /* Colunas dos quadros de marca: só admin cria, exclui e mexe (20). */
+    colunas: !!euPerfil?.admin,
   };
 
   const marcas = compartilhado.marcas || [];
   const marca = marcas.find((m) => m.id === marcaId) || null;
   const quadro = marca ? quadroDaMarca(compartilhado, marca.id) : null;
 
-  /* Duas fontes de dados, uma interface. O `api` do quadro é montado com
-     o par ler/gravar de cada lado — o componente Quadro não sabe se está
-     mexendo no localStorage de quem usa ou no quadro de uma marca. */
-  const apiPessoal = useMemo(
+  /* O quadro pessoal é um quadro do banco com dono (20): só a pessoa vê,
+     e cada cartão é gravado sozinho. Sem banco, cai no navegador. */
+  const pessoal = meuQuadro(compartilhado);
+  const apiLocal = useMemo(
     () =>
       criarApi(
         () => {
@@ -56,14 +60,16 @@ export default function Kanban({ busca }) {
       ),
     []
   );
-
-  /* As operacoes do quadro de marca moram no compartilhado: elas
-     precisam saber falar SQL quando o Supabase estiver ligado, o que
-     o criarApi generico (que so troca objetos) nao faz. */
-  const apiEmpresa = useMemo(
-    () => (quadro ? apiQuadroEmpresa(quadro.id) : null),
-    [quadro?.id]
+  const apiPessoal = useMemo(
+    () => (REMOTO ? (pessoal ? apiQuadro(pessoal.id) : null) : apiLocal),
+    [pessoal?.id, apiLocal]
   );
+  const apiEmpresa = useMemo(() => (quadro ? apiQuadro(quadro.id) : null), [quadro?.id]);
+
+  /* Colunas e cartões só do quadro que está aberto. */
+  useEffect(() => {
+    if (modo === "empresas" && quadro) carregarQuadro(quadro.id);
+  }, [modo, quadro?.id]);
 
   /* Nomes do time, para mostrar "Ana" em vez de "ana.souza@guipabrasil.com"
      no responsável e em quem criou cada cartão. */
@@ -109,7 +115,7 @@ export default function Kanban({ busca }) {
               nomeResponsavel={nomeResp}
             />
 
-            {marca && !quadro && podeQuadro.colunas && (
+            {marca && !quadro && euPerfil?.admin && (
               <button
                 className="btn primary sm"
                 type="button"
@@ -123,14 +129,13 @@ export default function Kanban({ busca }) {
       </div>
 
       {modo === "pessoal" ? (
-        <>
-          <Quadro
-            listas={estado.listas}
-            demandas={estado.demandas}
-            api={apiPessoal}
-            busca={busca}
-          />
-        </>
+        !REMOTO ? (
+          <Quadro listas={estado.listas} demandas={estado.demandas} api={apiLocal} busca={busca} />
+        ) : !pessoal?.carregado || !apiPessoal ? (
+          <div className="empty">Carregando…</div>
+        ) : (
+          <Quadro listas={pessoal.listas} demandas={pessoal.demandas} api={apiPessoal} busca={busca} />
+        )
       ) : !marcas.length ? (
         <div className="empty">
           Nenhuma marca cadastrada ainda. Os quadros saem do cadastro de
@@ -169,16 +174,16 @@ export default function Kanban({ busca }) {
             </button>
           </div>
 
-          <AvisoAlcance>
-            <b>Quadro compartilhado.</b> Tudo o que acontece aqui fica
-            registrado com o nome de quem fez: quem criou cada cartão, quem
-            moveu de uma coluna para outra e quem comentou.
-          </AvisoAlcance>
+          {compartilhado.erro && (
+            <div className="banner" style={{ borderColor: "var(--danger)" }}>{compartilhado.erro}</div>
+          )}
 
           {verHistorico ? (
             <div className="card">
               <HistoricoQuadro quadroId={quadro.id} />
             </div>
+          ) : !quadro.carregado ? (
+            <div className="empty">Carregando…</div>
           ) : (
             <Quadro
               listas={quadro.listas}

@@ -45,7 +45,7 @@ export const REMOTO = temSupabase();
 /* ---------- loja observável ---------- */
 
 function vazio() {
-  return { marcas: [], biblioteca: [], quadros: [] };
+  return { marcas: [], biblioteca: [], quadros: [], meuQuadroId: "" };
 }
 
 let estado = {
@@ -113,38 +113,33 @@ function gravarLocal(patch) {
 
 /* ---------- carregar ---------- */
 
-/* Uma leitura só na entrada, montando os quadros já aninhados — a
-   interface espera { listas, demandas } dentro de cada quadro, e traduzir
-   aqui evita que cada tela saiba que no banco isso são três tabelas. */
+/* Na entrada carrega só o leve: marcas, biblioteca e a lista de quadros
+   (sem colunas nem cartões). As colunas e os cartões de cada quadro vêm
+   quando ele é aberto (carregarQuadro). Antes tudo vinha de uma vez —
+   272 marcas, ~1.360 colunas e todos os cartões — e de novo a cada
+   tecla digitada em qualquer cartão, por qualquer pessoa. */
+let primeiraCarga = true;
 async function carregarRemoto() {
-  definir({ carregando: true, erro: "" });
+  if (primeiraCarga) definir({ carregando: true, erro: "" });
   try {
     /* A ordem por id no fim de cada consulta é o desempate: paginar sem
        ordem estável pode repetir uma linha numa página e pular outra. */
-    const [rm, rb, rq, rl, rc] = await Promise.all([
+    const [rm, rb, rq] = await Promise.all([
       todas(() => supabase.from("marcas").select("*").order("nome").order("id")),
       todas(() => supabase.from("biblioteca_prompts").select("*").order("criado_em", { ascending: false }).order("id")),
       todas(() => supabase.from("quadros").select("*").order("id")),
-      todas(() => supabase.from("listas").select("*").order("ordem").order("id")),
-      todas(() => supabase.from("cartoes").select("*").order("ordem").order("id")),
     ]);
-    const primeiro = [rm, rb, rq, rl, rc].find((r) => r.error);
+    const primeiro = [rm, rb, rq].find((r) => r.error);
     if (primeiro) throw primeiro.error;
 
-    const quadros = (rq.data || []).map((q) => ({
-      id: q.id,
-      marcaId: q.marca_id,
-      criadoPor: q.criado_por,
-      listas: (rl.data || [])
-        .filter((l) => l.quadro_id === q.id)
-        .map((l) => ({
-          id: l.id, nome: l.nome, cor: l.cor,
-          concluida: l.concluida, ordem: l.ordem,
-        })),
-      demandas: (rc.data || [])
-        .filter((c) => c.quadro_id === q.id)
-        .map(deCartao),
-    }));
+    /* Quadro já aberto mantém colunas e cartões que já estão na tela. */
+    const antes = new Map((estado.quadros || []).map((q) => [q.id, q]));
+    const quadros = (rq.data || []).map((q) => {
+      const a = antes.get(q.id);
+      return a?.carregado
+        ? { ...deQuadro(q), listas: a.listas, demandas: a.demandas, carregado: true }
+        : { ...deQuadro(q), listas: [], demandas: [], carregado: false };
+    });
 
     definir({
       marcas: (rm.data || []).map(deMarca),
@@ -153,13 +148,104 @@ async function carregarRemoto() {
       carregando: false,
       erro: "",
     });
+    primeiraCarga = false;
   } catch (e) {
     definir({ carregando: false, erro: explicarErro(e) });
   }
 }
 
+/* Colunas e cartões de UM quadro. Chamado quando o quadro é aberto. */
+const lendoQuadro = new Set();
+export async function carregarQuadro(id, forcar = false) {
+  if (!REMOTO || !id || lendoQuadro.has(id)) return;
+  const q = (estado.quadros || []).find((x) => x.id === id);
+  if (q?.carregado && !forcar) return;
+  lendoQuadro.add(id);
+  const [rl, rc] = await Promise.all([
+    todas(() => supabase.from("listas").select("*").eq("quadro_id", id).order("ordem").order("id")),
+    todas(() => supabase.from("cartoes").select("*").eq("quadro_id", id).order("ordem").order("id")),
+  ]);
+  lendoQuadro.delete(id);
+  const err = rl.error || rc.error;
+  if (err) return definir({ erro: explicarErro(err) });
+  mexerQuadro(id, (x) => ({
+    ...x,
+    listas: (rl.data || []).map(deLista),
+    demandas: (rc.data || []).map(deCartao),
+    carregado: true,
+  }));
+}
+
+/* O quadro pessoal de quem está logado (o banco cria na primeira vez). */
+async function iniciarMeuQuadro() {
+  const { data, error } = await supabase.rpc("meu_quadro_pessoal");
+  if (error || !data) return;
+  if (!(estado.quadros || []).some((q) => q.id === data)) {
+    definir({ quadros: [...(estado.quadros || []), { id: data, marcaId: null, dono: "", listas: [], demandas: [], carregado: false }] });
+  }
+  definir({ meuQuadroId: data });
+  carregarQuadro(data);
+}
+
+const porOrdem = (a, b) => (a.ordem ?? 0) - (b.ordem ?? 0) || String(a.id).localeCompare(String(b.id));
+
+/* Aplica uma mudança num quadro e mantém colunas e cartões na ordem. */
+function mexerQuadro(id, fn) {
+  const existe = (estado.quadros || []).some((q) => q.id === id);
+  const base = existe
+    ? estado.quadros
+    : [...(estado.quadros || []), { id, marcaId: null, dono: "", listas: [], demandas: [], carregado: false }];
+  definir({
+    quadros: base.map((q) => {
+      if (q.id !== id) return q;
+      const n = fn(q);
+      return { ...n, listas: [...n.listas].sort(porOrdem), demandas: [...n.demandas].sort(porOrdem) };
+    }),
+  });
+}
+
+/* Uma linha (coluna ou cartão) que chegou do banco: entra no quadro dela,
+   ou sai de onde estava. `campo` é "listas" ou "demandas". */
+function aplicarFilho(campo, linha, de) {
+  const item = de(linha);
+  const qid = linha.quadro_id;
+  definir({
+    quadros: (estado.quadros || []).map((q) => {
+      if (q.id === qid) {
+        if (!q.carregado) return q;
+        const sem = q[campo].filter((x) => x.id !== item.id);
+        return { ...q, [campo]: [...sem, item].sort(porOrdem) };
+      }
+      /* mudou de quadro: some do antigo */
+      return q[campo].some((x) => x.id === item.id)
+        ? { ...q, [campo]: q[campo].filter((x) => x.id !== item.id) }
+        : q;
+    }),
+  });
+}
+function removerFilho(campo, id) {
+  definir({
+    quadros: (estado.quadros || []).map((q) =>
+      q[campo].some((x) => x.id === id) ? { ...q, [campo]: q[campo].filter((x) => x.id !== id) } : q
+    ),
+  });
+}
+function aplicarLinha(chave, linha, de) {
+  const item = de(linha);
+  const sem = (estado[chave] || []).filter((x) => x.id !== item.id);
+  definir({ [chave]: chave === "marcas"
+    ? [...sem, item].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
+    : [item, ...sem] });
+}
+
 /* Tradução banco → app. O app usa `status` para o id da coluna desde o
    arquivo único; manter o nome evitou reescrever as telas todas. */
+function deQuadro(q) {
+  return { id: q.id, marcaId: q.marca_id, dono: q.dono || "", criadoPor: q.criado_por };
+}
+function deLista(l) {
+  return { id: l.id, nome: l.nome, cor: l.cor, concluida: l.concluida, ordem: l.ordem };
+}
 function deCartao(c) {
   return {
     id: c.id, titulo: c.titulo, solicitante: c.solicitante || "",
@@ -195,26 +281,43 @@ export function ouvirHistorico(fn) {
   return () => ouvintesHistorico.delete(fn);
 }
 
-/* Sem tempo real, o time só veria a mudança do colega ao recarregar.
-   Recarregar tudo a cada evento é mais chamadas do que o necessário, mas
-   é simples e correto — e o volume aqui (dezenas de marcas, centenas de
-   cartões) não justifica sincronizar linha a linha. */
+/* Tempo real linha a linha: chega a linha que mudou e só ela é aplicada.
+   (Antes cada evento recarregava as cinco tabelas inteiras.) As regras
+   do banco valem aqui também: ninguém recebe linha do quadro pessoal de
+   outra pessoa. */
 function ouvirRemoto() {
   if (!supabase || canal) return;
   canal = supabase
     .channel("guipahub-compartilhado")
     .on("postgres_changes", { event: "*", schema: "public" }, (msg) => {
-      /* Um evento de historico nasce a cada cartao salvo -- e o cartao
-         salva a cada tecla. Recarregar tudo por causa dele dobraria as
-         leituras sem mudar nada que o quadro mostra. Quem precisa do
-         historico (o cartao aberto) escuta pelo proprio canal. */
-      /* Prompts pessoais e favoritos têm o próprio canal (prompts.js). */
-      if (msg.table === "prompts" || msg.table === "prompts_favoritos") return;
-      if (msg.table === "cartoes_eventos") {
+      const t = msg.table;
+      const apagou = msg.eventType === "DELETE";
+      const linha = apagou ? msg.old : msg.new;
+      if (!linha) return;
+      if (t === "cartoes_eventos") {
         ouvintesHistorico.forEach((fn) => fn(msg.new || msg.old));
         return;
       }
-      carregarRemoto();
+      if (t === "cartoes") return apagou ? removerFilho("demandas", linha.id) : aplicarFilho("demandas", linha, deCartao);
+      if (t === "listas") return apagou ? removerFilho("listas", linha.id) : aplicarFilho("listas", linha, deLista);
+      if (t === "marcas") {
+        if (apagou) return definir({ marcas: estado.marcas.filter((m) => m.id !== linha.id) });
+        return aplicarLinha("marcas", linha, deMarca);
+      }
+      if (t === "biblioteca_prompts") {
+        if (apagou) return definir({ biblioteca: estado.biblioteca.filter((p) => p.id !== linha.id) });
+        return aplicarLinha("biblioteca", linha, dePrompt);
+      }
+      if (t === "quadros") {
+        if (apagou) return definir({ quadros: estado.quadros.filter((q) => q.id !== linha.id) });
+        const a = estado.quadros.find((q) => q.id === linha.id);
+        return definir({
+          quadros: a
+            ? estado.quadros.map((q) => (q.id === linha.id ? { ...q, ...deQuadro(linha) } : q))
+            : [...estado.quadros, { ...deQuadro(linha), listas: [], demandas: [], carregado: false }],
+        });
+      }
+      /* demais tabelas (perfis, Central, prompts…) têm o próprio canal */
     })
     .subscribe();
 }
@@ -223,6 +326,7 @@ export function iniciar() {
   if (REMOTO) {
     carregarRemoto();
     ouvirRemoto();
+    iniciarMeuQuadro();
   } else {
     definir({ ...lerLocal(), carregando: false });
   }
@@ -277,9 +381,9 @@ export async function salvarMarca(m, quem) {
   const q = m.id
     ? supabase.from("marcas").update(linha).eq("id", m.id)
     : supabase.from("marcas").insert(linha);
-  const { error } = await q;
+  const { data, error } = await q.select().single();
   if (error) return { ok: false, erro: explicarErro(error) };
-  await carregarRemoto();
+  aplicarLinha("marcas", data, deMarca);
   return { ok: true };
 }
 
@@ -297,9 +401,9 @@ export async function definirResponsavel(id, nome) {
     });
     return { ok: true };
   }
-  const { error } = await supabase.from("marcas").update({ responsavel }).eq("id", id);
+  const { data, error } = await supabase.from("marcas").update({ responsavel }).eq("id", id).select().single();
   if (error) return { ok: false, erro: explicarErro(error) };
-  await carregarRemoto();
+  aplicarLinha("marcas", data, deMarca);
   return { ok: true };
 }
 
@@ -314,7 +418,10 @@ export async function excluirMarca(id) {
   }
   const { error } = await supabase.from("marcas").delete().eq("id", id);
   if (error) return { ok: false, erro: explicarErro(error) };
-  await carregarRemoto();
+  definir({
+    marcas: estado.marcas.filter((m) => m.id !== id),
+    quadros: estado.quadros.filter((q) => q.marcaId !== id),
+  });
   return { ok: true };
 }
 
@@ -412,13 +519,17 @@ export async function comentar(quadroId, cartao, texto, perfil) {
    responsavel de uma conta e mostrar nome em vez de e-mail. Vem de uma
    funcao do banco que devolve so isso -- a tabela de perfis em si
    (quem e admin, que permissao tem) segue fechada para nao-admins. */
+/* Guardada por um minuto só: quem entrou no GuipaHub pela primeira vez
+   aparece na lista sem ninguém precisar recarregar a página. */
 let cachePessoas = null;
+let cachePessoasEm = 0;
 export async function pessoas() {
   if (!REMOTO) return [];
-  if (cachePessoas) return cachePessoas;
+  if (cachePessoas && Date.now() - cachePessoasEm < 60000) return cachePessoas;
   const { data, error } = await supabase.rpc("pessoas_da_guipa");
-  if (error) return [];
+  if (error) return cachePessoas || [];
   cachePessoas = data || [];
+  cachePessoasEm = Date.now();
   return cachePessoas;
 }
 
@@ -446,6 +557,7 @@ export function nichosConhecidos(comp) {
 /* ---------- biblioteca de prompts ---------- */
 
 export async function publicarPrompt(p, quem) {
+  void quem; // usado só no modo sem banco
   const existente = (estado.biblioteca || []).find(
     (x) => normaliza(x.titulo) === normaliza(p.titulo)
   );
@@ -472,13 +584,14 @@ export async function publicarPrompt(p, quem) {
     ferramenta: p.ferramenta || "", modelo: p.modelo || "",
   };
   /* Republicar atualiza em vez de duplicar — mesma regra do índice único
-     por título que existe no banco. */
+     por título que existe no banco. O autor quem põe é o banco (19): é
+     sempre quem publicou, e não muda depois. */
   const q = existente
     ? supabase.from("biblioteca_prompts").update(linha).eq("id", existente.id)
-    : supabase.from("biblioteca_prompts").insert({ ...linha, criado_por: quem || "" });
-  const { error } = await q;
+    : supabase.from("biblioteca_prompts").insert(linha);
+  const { data, error } = await q.select().single();
   if (error) return { ok: false, erro: explicarErro(error) };
-  await carregarRemoto();
+  aplicarLinha("biblioteca", data, dePrompt);
   return { ok: true };
 }
 
@@ -551,6 +664,13 @@ export function apiQuadroEmpresa(quadroId) {
     });
   }
 
+  /* Deu erro: avisa e relê o quadro, para a tela não ficar mostrando uma
+     mudança que o banco não aceitou. */
+  function falhou(error) {
+    definir({ erro: explicarErro(error) });
+    carregarQuadro(quadroId, true);
+  }
+
   return {
     async criarTarefa(listaId, titulo) {
       const q = atual();
@@ -566,18 +686,23 @@ export function apiQuadroEmpresa(quadroId) {
         });
         return;
       }
-      const { error } = await supabase.from("cartoes").insert({
-        quadro_id: quadroId, lista_id: listaId, titulo, ordem,
-      });
-      if (error) definir({ erro: explicarErro(error) });
-      else await carregarRemoto();
+      const { data, error } = await supabase
+        .from("cartoes")
+        .insert({ quadro_id: quadroId, lista_id: listaId, titulo, ordem })
+        .select()
+        .single();
+      if (error) falhou(error);
+      else aplicarFilho("demandas", data, deCartao);
     },
 
+    /* Chamado quando o cartão é SALVO (ao fechar a janela), não a cada
+       tecla. Mostra na hora e grava só este cartão. */
     async atualizarTarefa(t) {
       if (!REMOTO) {
         local({ demandas: atual().demandas.map((x) => (x.id === t.id ? t : x)) });
         return;
       }
+      mexerQuadro(quadroId, (q) => ({ ...q, demandas: q.demandas.map((x) => (x.id === t.id ? { ...x, ...t } : x)) }));
       const { error } = await supabase
         .from("cartoes")
         .update({
@@ -586,8 +711,7 @@ export function apiQuadroEmpresa(quadroId) {
           notas: t.notas || "", lista_id: t.status,
         })
         .eq("id", t.id);
-      if (error) definir({ erro: explicarErro(error) });
-      else await carregarRemoto();
+      if (error) falhou(error);
     },
 
     async excluirTarefa(id) {
@@ -595,9 +719,12 @@ export function apiQuadroEmpresa(quadroId) {
         local({ demandas: atual().demandas.filter((x) => x.id !== id) });
         return;
       }
-      const { error } = await supabase.from("cartoes").delete().eq("id", id);
-      if (error) definir({ erro: explicarErro(error) });
-      else await carregarRemoto();
+      const { data, error } = await supabase.from("cartoes").delete().eq("id", id).select("id");
+      if (error) return falhou(error);
+      /* Sem erro e sem linha = a regra do banco não deixou (cartão de outra
+         pessoa). Dizer, em vez de fingir que apagou. */
+      if (!data || !data.length) return definir({ erro: "Você só pode excluir os cartões que criou." });
+      removerFilho("demandas", id);
     },
 
     async moverTarefa(id, listaId, indice) {
@@ -616,12 +743,17 @@ export function apiQuadroEmpresa(quadroId) {
         });
         return;
       }
+      /* Move na tela antes da resposta: arrastar não pode ficar esperando
+         a rede para o cartão "cair" no lugar. */
+      mexerQuadro(quadroId, (x) => ({
+        ...x,
+        demandas: x.demandas.map((d) => (d.id === id ? { ...d, status: listaId, ordem } : d)),
+      }));
       const { error } = await supabase
         .from("cartoes")
         .update({ lista_id: listaId, ordem })
         .eq("id", id);
-      if (error) definir({ erro: explicarErro(error) });
-      else await carregarRemoto();
+      if (error) falhou(error);
     },
 
     async criarLista() {
@@ -633,11 +765,13 @@ export function apiQuadroEmpresa(quadroId) {
         local({ listas: [...q.listas, { id: uid("l"), nome: "Nova lista", cor, concluida: false, ordem }] });
         return;
       }
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("listas")
-        .insert({ quadro_id: quadroId, nome: "Nova lista", cor, concluida: false, ordem });
-      if (error) definir({ erro: explicarErro(error) });
-      else await carregarRemoto();
+        .insert({ quadro_id: quadroId, nome: "Nova lista", cor, concluida: false, ordem })
+        .select()
+        .single();
+      if (error) falhou(error);
+      else aplicarFilho("listas", data, deLista);
     },
 
     async atualizarLista(id, patch) {
@@ -645,9 +779,9 @@ export function apiQuadroEmpresa(quadroId) {
         local({ listas: atual().listas.map((L) => (L.id === id ? { ...L, ...patch } : L)) });
         return;
       }
+      mexerQuadro(quadroId, (q) => ({ ...q, listas: q.listas.map((L) => (L.id === id ? { ...L, ...patch } : L)) }));
       const { error } = await supabase.from("listas").update(patch).eq("id", id);
-      if (error) definir({ erro: explicarErro(error) });
-      else await carregarRemoto();
+      if (error) falhou(error);
     },
 
     async moverLista(id, delta) {
@@ -667,13 +801,18 @@ export function apiQuadroEmpresa(quadroId) {
         });
         return;
       }
+      mexerQuadro(quadroId, (x) => ({
+        ...x,
+        listas: x.listas.map((L) =>
+          L.id === arr[i].id ? { ...L, ordem: b } : L.id === arr[j].id ? { ...L, ordem: a } : L
+        ),
+      }));
       const [r1, r2] = await Promise.all([
         supabase.from("listas").update({ ordem: b }).eq("id", arr[i].id),
         supabase.from("listas").update({ ordem: a }).eq("id", arr[j].id),
       ]);
       const err = r1.error || r2.error;
-      if (err) definir({ erro: explicarErro(err) });
-      else await carregarRemoto();
+      if (err) falhou(err);
     },
 
     /* Arrastar solta a coluna numa POSIÇÃO, não um passo para o lado.
@@ -711,12 +850,12 @@ export function apiQuadroEmpresa(quadroId) {
           local({ listas: fila.map((L, k) => ({ ...L, ordem: k })) });
           return;
         }
+        mexerQuadro(quadroId, (x) => ({ ...x, listas: fila.map((L, k) => ({ ...L, ordem: k })) }));
         const rs = await Promise.all(
           fila.map((L, k) => supabase.from("listas").update({ ordem: k }).eq("id", L.id))
         );
         const e = rs.find((r) => r.error);
-        if (e) definir({ erro: explicarErro(e.error) });
-        else await carregarRemoto();
+        if (e) falhou(e.error);
         return;
       }
 
@@ -724,9 +863,9 @@ export function apiQuadroEmpresa(quadroId) {
         local({ listas: q.listas.map((L) => (L.id === id ? { ...L, ordem: nova } : L)) });
         return;
       }
+      mexerQuadro(quadroId, (x) => ({ ...x, listas: x.listas.map((L) => (L.id === id ? { ...L, ordem: nova } : L)) }));
       const { error } = await supabase.from("listas").update({ ordem: nova }).eq("id", id);
-      if (error) definir({ erro: explicarErro(error) });
-      else await carregarRemoto();
+      if (error) falhou(error);
     },
 
     async excluirLista(id) {
@@ -748,10 +887,26 @@ export function apiQuadroEmpresa(quadroId) {
          os cartões junto. Mover antes é o que preserva o trabalho. */
       const { error: e1 } = await supabase
         .from("cartoes").update({ lista_id: restantes[0].id }).eq("lista_id", id);
-      if (e1) { definir({ erro: explicarErro(e1) }); return; }
+      if (e1) return falhou(e1);
       const { error: e2 } = await supabase.from("listas").delete().eq("id", id);
-      if (e2) definir({ erro: explicarErro(e2) });
-      else await carregarRemoto();
+      if (e2) return falhou(e2);
+      carregarQuadro(quadroId, true);
     },
   };
+}
+
+/* O mesmo conjunto de operações serve o quadro pessoal: ele é um quadro
+   como os de marca, só que com dono (20-quadro-pessoal-em-linhas). */
+export const apiQuadro = apiQuadroEmpresa;
+
+/* Coluna de um cartão, para cor e "está concluído?". */
+export function infoDaLista(quadro, id) {
+  const L = (quadro?.listas || []).find((x) => x.id === id);
+  if (!L) return { key: "", label: "sem lista", color: "var(--border)", concluida: false };
+  return { key: L.id, label: L.nome, color: L.cor, concluida: !!L.concluida };
+}
+
+/* O quadro pessoal de quem está logado, já na forma { listas, demandas }. */
+export function meuQuadro(comp) {
+  return (comp.quadros || []).find((q) => q.id === comp.meuQuadroId) || null;
 }

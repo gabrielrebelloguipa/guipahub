@@ -1,15 +1,17 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useState } from "react";
 import Sidebar from "./componentes/Sidebar.jsx";
 import Topbar from "./componentes/Topbar.jsx";
 import Login from "./componentes/Login.jsx";
-import Hoje from "./abas/Hoje.jsx";
-import Kanban from "./abas/Kanban.jsx";
-import Central from "./abas/Central.jsx";
-import Marcas from "./abas/Marcas.jsx";
-import Imagens from "./abas/Clientes.jsx";
-import Prompts from "./abas/Prompts.jsx";
-import Configuracoes from "./abas/Configuracoes.jsx";
-import Calculadora from "./abas/Calculadora.jsx";
+/* Cada aba é baixada quando é aberta pela primeira vez, não todas na
+   entrada: a primeira tela chega mais rápido. */
+const Hoje = lazy(() => import("./abas/Hoje.jsx"));
+const Kanban = lazy(() => import("./abas/Kanban.jsx"));
+const Central = lazy(() => import("./abas/Central.jsx"));
+const Marcas = lazy(() => import("./abas/Marcas.jsx"));
+const Imagens = lazy(() => import("./abas/Clientes.jsx"));
+const Prompts = lazy(() => import("./abas/Prompts.jsx"));
+const Configuracoes = lazy(() => import("./abas/Configuracoes.jsx"));
+const Calculadora = lazy(() => import("./abas/Calculadora.jsx"));
 import { useAuth } from "./lib/useAuth.js";
 import { useMenu } from "./lib/menu.js";
 import { restaurarSessao, tokenValido, renovarAcessoDrive } from "./lib/auth.js";
@@ -17,8 +19,7 @@ import { verificarAcesso } from "./lib/drive.js";
 import { iniciar as iniciarCompartilhado } from "./lib/compartilhado.js";
 import { iniciarCentral } from "./lib/central.js";
 import { iniciarPrompts, migrarLocais } from "./lib/prompts.js";
-import { iniciarKanbanPessoal } from "./lib/kanbanPessoal.js";
-import { pegarEstado, alterar } from "./lib/estado.js";
+import { pegarEstado, alterar, usarConta } from "./lib/estado.js";
 import {
   carregar as carregarPermissoes,
   ouvir as ouvirPermissoes,
@@ -100,9 +101,11 @@ export default function App() {
 
   /* Prompts que ainda estejam no navegador (versão antiga) sobem uma vez
      para o banco, como da pessoa logada, e saem do local. */
-  /* Quadro pessoal: traz do banco o desta conta e passa a espelhar. */
-  useEffect(() => {
-    if (auth.perfil?.email) iniciarKanbanPessoal(auth.perfil.email);
+  /* O que fica no navegador é separado por conta: troca ao entrar e
+     volta ao vazio ao sair. Antes de pintar, para ninguém ver nem por um
+     instante o que é de quem usou o computador antes. */
+  useLayoutEffect(() => {
+    usarConta(auth.perfil?.email || "");
   }, [auth.perfil?.email]);
 
   useEffect(() => {
@@ -141,6 +144,7 @@ export default function App() {
             </div>
           </div>
           <div className="view" id="view">
+            <Suspense fallback={<div className="empty">Carregando…</div>}>
             {secao === "hoje" && <Hoje aoIrPara={setSecao} />}
             {secao === "demandas" && <Kanban busca={busca} />}
             {secao === "central" && <Central busca={busca} />}
@@ -149,6 +153,7 @@ export default function App() {
             {secao === "prompts" && <Prompts busca={busca} />}
             {secao === "config" && <Configuracoes />}
             {secao === "calculadora" && <Calculadora />}
+            </Suspense>
           </div>
         </div>
       </div>

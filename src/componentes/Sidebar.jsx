@@ -1,5 +1,5 @@
-import { useEstado, statusInfo } from "../lib/estado.js";
-import { useCompartilhado } from "../lib/compartilhado.js";
+import { useEstado } from "../lib/estado.js";
+import { useCompartilhado, meuQuadro, infoDaLista, REMOTO } from "../lib/compartilhado.js";
 import { useCentral } from "../lib/central.js";
 import { useMenu } from "../lib/menu.js";
 import { usePrompts } from "../lib/prompts.js";
@@ -18,9 +18,10 @@ export default function Sidebar({ secao, aoTrocar }) {
   /* Cartão em coluna de concluído não conta como pendente — é o que faz
      "Finalizadas" se comportar direito sem regra especial. */
   function contagem(key) {
-    if (key === "demandas")
-      return estado.demandas.filter((d) => !statusInfo(estado, d.status).concluida)
-        .length;
+    if (key === "demandas") {
+      const q = REMOTO ? meuQuadro(compartilhado) || { listas: [], demandas: [] } : estado;
+      return q.demandas.filter((d) => !infoDaLista(q, d.status).concluida).length;
+    }
     if (key === "prompts") return prompts.meus.length + prompts.favoritos.length;
     if (key === "marcas") return (compartilhado.marcas || []).length;
     if (key === "central") return central.materiais.length + central.guias.length + central.imagens.length;

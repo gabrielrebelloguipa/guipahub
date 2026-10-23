@@ -34,12 +34,17 @@ function CartaoModal({ tarefa, listas, api, aoFechar, pode = TUDO, historico }) 
   const [d, setD] = useState(tarefa);
   const [excluindo, setExcluindo] = useState(false);
 
-  /* Salva a cada mudança — não existe botão "Salvar". Fechar sem gravar
-     seria a surpresa, não o contrário. */
+  /* Digitar só muda a janela. O cartão é gravado UMA vez, ao salvar —
+     e fechar (✕, Esc, clique fora) também salva, para ninguém perder o
+     que escreveu. Antes cada tecla ia para o banco. */
   function grava(patch) {
-    const novo = { ...d, ...patch };
-    setD(novo);
-    api.atualizarTarefa(novo);
+    setD((atual) => ({ ...atual, ...patch }));
+  }
+  const CAMPOS = ["titulo", "solicitante", "prazo", "prioridade", "notas", "status"];
+  const mudou = CAMPOS.some((k) => (d[k] || "") !== (tarefa[k] || ""));
+  function fechar() {
+    if (mudou && d.titulo.trim()) api.atualizarTarefa({ ...d, titulo: d.titulo.trim() });
+    aoFechar();
   }
 
   /* Quem só pode mover ainda troca a lista pelo seletor — é o mesmo
@@ -61,7 +66,7 @@ function CartaoModal({ tarefa, listas, api, aoFechar, pode = TUDO, historico }) 
             {lista?.nome || "Tarefa"}
           </span>
         }
-        aoFechar={aoFechar}
+        aoFechar={fechar}
         classe={"tarefa" + (historico ? "" : " sem-painel")}
         estilo={{ "--cor-lista": cor }}
         acoes={
@@ -76,8 +81,8 @@ function CartaoModal({ tarefa, listas, api, aoFechar, pode = TUDO, historico }) 
                 Excluir tarefa
               </button>
             )}
-            <button className="btn primary" type="button" onClick={aoFechar}>
-              Pronto
+            <button className="btn primary" type="button" onClick={fechar}>
+              {mudou ? "Salvar" : "Fechar"}
             </button>
           </>
         }
