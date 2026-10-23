@@ -6,7 +6,6 @@ import {
   excluirMarca,
   validarMarca,
   nichosConhecidos,
-  quadroDaMarca,
   definirResponsavel,
   pessoas,
   nomeDe,
@@ -271,9 +270,7 @@ function FormMarca({ inicial, aoFechar }) {
 }
 
 function Detalhe({ marca, aoFechar, aoEditar, aoExcluir }) {
-  const compartilhado = useCompartilhado();
   const podeFazer = usePode();
-  const temQuadro = !!quadroDaMarca(compartilhado, marca.id);
   const time = useTime();
   const { responsaveis: responsaveisDet } = usePermissoes();
   const [resp, setResp] = useState(marca.responsavel || "");
@@ -361,12 +358,6 @@ function Detalhe({ marca, aoFechar, aoEditar, aoExcluir }) {
       <div className="kv">
         <div className="k">Resumo</div>
         <div className="v">{marca.resumo}</div>
-      </div>
-      <div className="kv">
-        <div className="k">Quadro</div>
-        <div className="v">
-          {temQuadro ? "tem kanban próprio" : "o quadro aparece em instantes"}
-        </div>
       </div>
       <div className="kv">
         <div className="k">Cadastrada</div>

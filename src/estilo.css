@@ -386,7 +386,11 @@
   }
   .lista {
     background: var(--surface); border: 1px solid var(--border);
-    border-radius: 12px; width: 268px; flex-shrink: 0;
+    border-radius: 12px;
+    /* Dividem a largura da tela em vez de 268px fixos: cinco colunas
+       cabem lado a lado num notebook sem barra de rolagem. Abaixo de
+       190px o título e o cartão ficam ilegíveis, e aí sim a lista rola. */
+    flex: 1 1 0; min-width: 190px; max-width: 340px;
     display: flex; flex-direction: column; max-height: 100%;
   }
   .lista.alvo { border-color: var(--accent); background: var(--accent-soft); }
@@ -702,7 +706,7 @@
 
   /* O vazio que abre onde a coluna vai cair. */
   .placeholder-lista {
-    flex: none; width: 272px; min-height: 120px; border-radius: var(--radius);
+    flex: 1 1 0; min-width: 190px; max-width: 340px; min-height: 120px; border-radius: var(--radius);
     border: 2px dashed var(--accent); background: var(--accent-soft);
     opacity: .5;
   }
@@ -854,15 +858,16 @@
 
   /* ---------- calculadora comercial ---------- */
 
-  /* A folha é larga como a planilha (13 colunas). Rola dentro de si em
-     vez de empurrar a página para o lado. */
+  /* A folha encolhe com a tela: colunas flexíveis e letra que diminui um
+     pouco em tela menor. Só abaixo de ~880px (janela bem estreita) ela
+     para de encolher e rola dentro de si, sem empurrar a página. */
   .calc-rola { overflow-x: auto; border-radius: var(--radius); }
 
   /* A folha tem fundo claro fixo, nos dois temas: ela é o que vira
      imagem e vai para o cliente, e proposta comercial não sai em tela
      escura. */
   .calc-folha {
-    min-width: 1080px; background: #ffffff; color: #1d1d1b;
+    min-width: 880px; background: #ffffff; color: #1d1d1b;
     border: 1px solid var(--border); border-radius: var(--radius);
     padding: 22px 24px 18px;
   }
@@ -877,13 +882,16 @@
   .calc-cab-item .calc-in.txt { flex: 1 1 auto; font-weight: 500; }
   .calc-cab-item .calc-val { font-weight: 500; }
 
-  .calc-tab { border-collapse: collapse; width: 100%; font-size: 0.78rem; }
+  .calc-tab {
+    border-collapse: collapse; width: 100%;
+    font-size: clamp(0.68rem, 0.55rem + 0.25vw, 0.8rem);
+  }
   .calc-tab th {
-    background: #f76e00; color: #ffffff; font-weight: 700; font-size: 0.7rem;
-    padding: 8px 6px; text-align: center; line-height: 1.2;
+    background: #f76e00; color: #ffffff; font-weight: 700; font-size: 0.88em;
+    padding: 8px 4px; text-align: center; line-height: 1.2;
   }
   .calc-tab td {
-    padding: 5px 6px; border-bottom: 1px solid #ececea; text-align: right;
+    padding: 4px 3px; border-bottom: 1px solid #ececea; text-align: right;
     white-space: nowrap; color: #1d1d1b; vertical-align: middle;
   }
   .calc-tab td:first-child { text-align: left; }
@@ -896,22 +904,34 @@
   .calc-val.dim { color: #8a8a85; }
   .calc-ativos { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
   .calc-acoes { text-align: center !important; }
-  .calc-acoes .btn { padding: 2px 7px; }
+  .calc-acoes .btn { padding: 2px 5px; }
 
-  /* Campo que não parece campo: a folha deve ler como documento, e a
-     borda só aparece quando o cursor passa ou o campo está em uso. */
+  /* Campo editável tem cara de campo: fundo laranja-claro e borda, para
+     quem monta a proposta ver de cara o que pode mudar (período, motos,
+     desconto…) sem precisar clicar para descobrir. O que é conta fica
+     como texto puro. Na exportação de imagem os campos viram texto, então
+     a proposta que vai para o cliente não leva esse destaque. */
   .calc-in {
-    font: inherit; font-variant-numeric: tabular-nums; color: #1d1d1b;
-    background: transparent; border: 1px solid transparent; border-radius: 5px;
-    padding: 3px 5px; width: 92px; text-align: right;
+    font: inherit; font-variant-numeric: tabular-nums; color: #1d1d1b; font-weight: 600;
+    background: #fff1e4; border: 1px solid #f5c294; border-radius: 5px;
+    padding: 3px 5px; width: 100%; min-width: 56px; text-align: right;
   }
-  .calc-in.largo { width: 118px; }
-  .calc-in.txt { width: 100%; min-width: 60px; text-align: left; }
-  .calc-tab td:first-child .calc-in.txt { width: 64px; }
-  select.calc-in { width: 96px; text-align: left; cursor: pointer; }
-  .calc-in:hover { border-color: #dddcd7; background: #fffaf5; }
-  .calc-in:focus { outline: none; border-color: #f76e00; background: #ffffff; }
-  .calc-ativos .calc-in { width: 44px; }
+  .calc-in.largo { min-width: 80px; }
+  .calc-in.txt { min-width: 60px; text-align: left; }
+  .calc-tab td:first-child .calc-in.txt { min-width: 64px; }
+  select.calc-in { min-width: 66px; text-align: left; cursor: pointer; }
+  .calc-in:hover { border-color: #f76e00; background: #ffe6cf; }
+  .calc-in:focus { outline: none; border-color: #f76e00; background: #ffffff; box-shadow: 0 0 0 2px #fcd3ae; }
+  .calc-ativos .calc-in { width: 42px; min-width: 42px; }
+  .calc-cab-item .calc-in.txt { text-align: left; font-weight: 500; }
+  .calc-legenda {
+    display: flex; align-items: center; gap: 8px; margin: 10px 0 0;
+    font-size: 0.78rem; color: var(--text-dim);
+  }
+  .calc-legenda i {
+    display: inline-block; width: 26px; height: 14px; border-radius: 4px;
+    background: #fff1e4; border: 1px solid #f5c294;
+  }
 
   .calc-notas {
     list-style: none; margin: 16px 0 0; padding: 0;

@@ -88,7 +88,7 @@ export default function Calculadora() {
   const auth = useAuth();
   const guardado = lerGuardado();
 
-  const [modo, setModo] = useState(guardado?.modo || "circuito");
+  const [modo, setModo] = useState(guardado?.modo || "especiais");
   const [cab, setCab] = useState(
     guardado?.cab || {
       agencia: "", cliente: "", campanha: "", periodo: "",
@@ -155,11 +155,11 @@ export default function Calculadora() {
     <>
       <div className="chips" style={{ alignItems: "center" }}>
         <div className="seg">
-          <button type="button" className={modo === "circuito" ? "on" : ""} onClick={() => setModo("circuito")}>
-            Circuito SP/RJ
-          </button>
           <button type="button" className={modo === "especiais" ? "on" : ""} onClick={() => setModo("especiais")}>
             Projetos Especiais
+          </button>
+          <button type="button" className={modo === "circuito" ? "on" : ""} onClick={() => setModo("circuito")}>
+            Circuito SP/RJ
           </button>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -177,7 +177,11 @@ export default function Calculadora() {
 
       {erro && <div className="banner" style={{ borderColor: "var(--danger)" }}>{erro}</div>}
 
-      <div className="calc-rola">
+      <div className="calc-legenda">
+        <i /> Campos em laranja podem ser alterados. O resto é calculado sozinho.
+      </div>
+
+      <div className="calc-rola" style={{ marginTop: 8 }}>
         <div className={"calc-folha" + (capturando ? " capturando" : "")} ref={folha}>
           <div className="calc-topo">
             <div className="calc-marca">GUIPA</div>
