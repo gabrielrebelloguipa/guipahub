@@ -904,7 +904,7 @@
   .calc-val.dim { color: #8a8a85; }
   /* "Digital 1:1 -" quebra linha acima do campo quando aperta: é a
      coluna que mais segurava a tabela larga. */
-  .calc-ativos { display: inline-flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 2px 4px; white-space: nowrap; max-width: 124px; }
+  .calc-ativos { display: inline-flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 2px 4px; white-space: nowrap; max-width: 140px; }
   .calc-acoes { text-align: center !important; }
   .calc-acoes .btn { padding: 2px 5px; display: flex; margin: 1px auto; }
 
