@@ -11,6 +11,7 @@ import Prompts from "./abas/Prompts.jsx";
 import Configuracoes from "./abas/Configuracoes.jsx";
 import Calculadora from "./abas/Calculadora.jsx";
 import { useAuth } from "./lib/useAuth.js";
+import { useMenu } from "./lib/menu.js";
 import { restaurarSessao, tokenValido, renovarAcessoDrive } from "./lib/auth.js";
 import { verificarAcesso } from "./lib/drive.js";
 import { iniciar as iniciarCompartilhado } from "./lib/compartilhado.js";
@@ -26,18 +27,22 @@ import { DIAS, MESES } from "./lib/constantes.js";
 
 const TITULOS = {
   hoje: ["Bom trabalho", ""],
-  demandas: ["Kanban", "Arraste os cartões entre as colunas"],
-  central: ["Central Guipa", "Material oficial da GUIPA"],
-  marcas: ["Marcas", "Cadastro compartilhado — alimenta os quadros por empresa"],
-  clientes: ["Imagens", "O acervo de imagens dos clientes, direto do Drive"],
-  prompts: ["Prompts", "Os prompts que você reusa, prontos pra copiar"],
-  config: ["Configurações", "Permissões do time e de onde vem o acervo"],
-  calculadora: ["Calculadora comercial", "Monte a proposta e exporte em Excel ou imagem"],
+  demandas: ["Kanban", ""],
+  central: ["Central Guipa", ""],
+  marcas: ["Marcas", ""],
+  clientes: ["Imagens", ""],
+  prompts: ["Prompts", ""],
+  config: ["Configurações", ""],
+  calculadora: ["Calculadora comercial", ""],
 };
 
 export default function App() {
   const auth = useAuth();
-  const [secao, setSecao] = useState("hoje");
+  /* Sem escolha ainda, abre no primeiro item do menu da pessoa: quem pôs
+     a Calculadora no topo cai direto nela. */
+  const [escolhida, setSecao] = useState(null);
+  const menu = useMenu();
+  const secao = escolhida ?? menu.todas[0]?.key ?? "hoje";
   const [busca, setBusca] = useState("");
 
   useEffect(() => {
@@ -106,7 +111,7 @@ export default function App() {
           <div className="head">
             <div id="hLeft">
               <h1 className="h1">{cabecalho}</h1>
-              <div className="sub">{subtitulo}</div>
+              {subtitulo && <div className="sub">{subtitulo}</div>}
             </div>
           </div>
           <div className="view" id="view">

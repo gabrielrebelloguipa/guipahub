@@ -14,6 +14,7 @@ import {
 } from "../lib/permissoes.js";
 import { buscarPastas } from "../lib/drive.js";
 import { auditoriaComentarios } from "../lib/compartilhado.js";
+import { useMenu, salvarOrdem } from "../lib/menu.js";
 
 /* ---------- permissões ---------- */
 
@@ -74,7 +75,6 @@ function Matriz({ valor, aoMudar, desabilitada }) {
                           disabled={travada}
                           onChange={(e) => aoMudar(a.key, c, e.target.checked)}
                         />
-                        {semTranca && <span className="mz-asterisco">*</span>}
                       </label>
                     </td>
                   );
@@ -118,13 +118,6 @@ function Permissoes({ ehAdmin, meuEmail }) {
 
   return (
     <>
-      <div className="banner">
-        <b>Isto vale de verdade.</b> Desmarcar "Excluir" no Kanban não só
-        esconde o botão: o banco passa a recusar a exclusão, mesmo de quem
-        tentar pelo console. Admin passa por cima de tudo, para nunca ficar
-        sem como desfazer.
-      </div>
-
       {erro && (
         <div className="banner" style={{ borderColor: "var(--danger)" }}>
           <b>O banco recusou. </b>
@@ -136,10 +129,6 @@ function Permissoes({ ehAdmin, meuEmail }) {
         <div className="card-h">
           <div className="t">Padrão de quem entra</div>
         </div>
-        <div className="sub" style={{ marginBottom: 12 }}>
-          Vale para todo mundo sem exceção própria, inclusive quem já entrou e
-          nunca foi personalizado. Mudar aqui muda para eles junto.
-        </div>
         <Matriz
           valor={padraoResolvido}
           desabilitada={!ehAdmin || salvando === "padrao"}
@@ -150,20 +139,11 @@ function Permissoes({ ehAdmin, meuEmail }) {
             )
           }
         />
-        <div className="sub" style={{ marginTop: 10 }}>
-          <span className="mz-asterisco">*</span> Mover cartão é separado só na
-          tela. Para o banco, mover e editar são a mesma operação: quem pode
-          um consegue o outro pelo console.
-        </div>
       </div>
 
       <div className="card" style={{ marginTop: 14 }}>
         <div className="card-h">
           <div className="t">Pessoas ({perfis.length})</div>
-        </div>
-        <div className="sub" style={{ marginBottom: 12 }}>
-          Só aparece quem já entrou pelo menos uma vez. A conta passa a existir
-          no primeiro login, então não dá para preparar a permissão antes.
         </div>
 
         {perfis.map((p) => {
@@ -273,11 +253,6 @@ function Responsaveis({ ehAdmin, meuEmail }) {
 
   return (
     <div className="card">
-      <div className="sub" style={{ marginBottom: 12 }}>
-        Aparecem no seletor de responsável de cada marca. A marca guarda o
-        e-mail, e "Minha carteira" reconhece a pessoa pelo login. Tirar alguém
-        daqui não apaga a carteira dele.
-      </div>
       {erro && <div className="banner" style={{ borderColor: "var(--danger)" }}>{erro}</div>}
       <div className="list">
         {responsaveis.map((r) => (
@@ -466,13 +441,6 @@ function ConfigDrive({ ehAdmin, meuEmail }) {
 
   return (
     <>
-      <div className="banner">
-        <b>De onde a aba Imagens lê o acervo.</b> A aba só enxerga o que
-        estiver dentro desta pasta, em qualquer profundidade — nunca nada fora
-        dela. Sem uma pasta escolhida aqui, a aba Imagens não tem onde
-        procurar, e avisa isso para quem abrir.
-      </div>
-
       {erro && (
         <div className="banner" style={{ borderColor: "var(--danger)" }}>
           {erro}
@@ -565,6 +533,97 @@ function ConfigDrive({ ehAdmin, meuEmail }) {
 /* Mesma ideia da Central: sub-aba escondia metade da tela atras de um
    clique, e quem abre Configuracoes costuma mexer nas duas coisas na
    mesma sentada. Empilhado, as duas estao a uma rolagem. */
+/* ---------- ordem do menu ---------- */
+
+/* Cada um põe no topo o que mais usa. Arrastar a linha ou usar as setas;
+   vale na hora, e o app passa a abrir no primeiro item. */
+function OrdemMenu() {
+  const { abas, personalizada, email } = useMenu();
+  const [arrastando, setArrastando] = useState(null);
+  const [sobre, setSobre] = useState(null);
+
+  const chaves = abas.map((a) => a.key);
+  function mover(de, para) {
+    if (para < 0 || para >= chaves.length || de === para) return;
+    const nova = [...chaves];
+    const [k] = nova.splice(de, 1);
+    nova.splice(para, 0, k);
+    salvarOrdem(email, nova);
+  }
+
+  return (
+    <div className="card">
+      <ol className="ordem-lista">
+        {abas.map((a, i) => (
+          <li
+            key={a.key}
+            className={
+              "ordem-item" +
+              (arrastando === i ? " arrastando" : "") +
+              (sobre === i && arrastando !== null && arrastando !== i ? " alvo" : "")
+            }
+            draggable
+            onDragStart={(e) => {
+              setArrastando(i);
+              e.dataTransfer.effectAllowed = "move";
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setSobre(i);
+            }}
+            onDragLeave={() => setSobre((v) => (v === i ? null : v))}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (arrastando !== null) mover(arrastando, i);
+              setArrastando(null);
+              setSobre(null);
+            }}
+            onDragEnd={() => {
+              setArrastando(null);
+              setSobre(null);
+            }}
+          >
+            <span className="ordem-alca" aria-hidden="true">⋮⋮</span>
+            <span className="ordem-n">{i + 1}</span>
+            <span className="ordem-ico">{a.ico}</span>
+            <span className="ordem-nome">{a.label}</span>
+            <span className="ordem-setas">
+              <button
+                type="button"
+                className="btn sm ghost"
+                aria-label={"Subir " + a.label}
+                disabled={i === 0}
+                onClick={() => mover(i, i - 1)}
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                className="btn sm ghost"
+                aria-label={"Descer " + a.label}
+                disabled={i === abas.length - 1}
+                onClick={() => mover(i, i + 1)}
+              >
+                ↓
+              </button>
+            </span>
+          </li>
+        ))}
+      </ol>
+      {personalizada && (
+        <button
+          type="button"
+          className="btn sm ghost"
+          style={{ marginTop: 10 }}
+          onClick={() => salvarOrdem(email, null)}
+        >
+          Voltar à ordem padrão
+        </button>
+      )}
+    </div>
+  );
+}
+
 function Secao({ titulo, sub, children }) {
   return (
     <section className="secao">
@@ -591,31 +650,35 @@ export default function Configuracoes() {
       </div>
     );
 
+  /* Quem não é admin só tem a ordem do menu para mexer aqui. Permissões,
+     responsáveis, auditoria e Drive nem aparecem — e o banco recusa a
+     escrita de quem não é admin de qualquer jeito. */
+  if (!ehAdmin)
+    return (
+      <Secao titulo="Ordem do menu">
+        <OrdemMenu />
+      </Secao>
+    );
+
   return (
     <>
-      {!ehAdmin && (
-        <div className="banner">
-          <b>Você está vendo em modo leitura.</b> Só quem é admin altera
-          permissões e a configuração do Drive. Peça a um admin se precisar
-          mudar algo.
-        </div>
-      )}
+      <Secao titulo="Ordem do menu">
+        <OrdemMenu />
+      </Secao>
 
-      <Secao titulo="Permissões de usuário" sub="Quem vê o quê, e o padrão de quem entra">
+      <Secao titulo="Permissões de usuário">
         <Permissoes ehAdmin={ehAdmin} meuEmail={auth.perfil?.email} />
       </Secao>
 
-      <Secao titulo="Responsáveis do comercial" sub="Quem pode cuidar de uma conta">
+      <Secao titulo="Responsáveis do comercial">
         <Responsaveis ehAdmin={ehAdmin} meuEmail={auth.perfil?.email} />
       </Secao>
 
-      {ehAdmin && (
-        <Secao titulo="Auditoria de comentários" sub="Toda versão de todo comentário — só admin vê">
-          <Auditoria />
-        </Secao>
-      )}
+      <Secao titulo="Auditoria de comentários">
+        <Auditoria />
+      </Secao>
 
-      <Secao titulo="Drive" sub="De onde a aba Imagens lê o acervo">
+      <Secao titulo="Drive">
         <ConfigDrive ehAdmin={ehAdmin} meuEmail={auth.perfil?.email} />
       </Secao>
     </>

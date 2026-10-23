@@ -167,7 +167,6 @@ function CartaoModal({ tarefa, listas, api, aoFechar, pode = TUDO, historico }) 
                 Criada em {fmtData(d.criadoEm)}
                 {historico && d.criadoPor ? <> por <b>{historico.nome(d.criadoPor)}</b></> : null}
               </span>
-              <span className="tarefa-salvo">✓ salva sozinha a cada mudança</span>
             </div>
           </div>
 

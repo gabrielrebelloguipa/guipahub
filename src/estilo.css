@@ -111,12 +111,7 @@
     display: flex; flex-direction: column; padding: 18px 12px; gap: 20px;
   }
   .side-brand { padding: 0 10px; display: flex; align-items: center; gap: 9px; }
-  .side-brand .mark {
-    width: 26px; height: 26px; border-radius: 7px; flex-shrink: 0;
-    background: var(--accent); color: var(--accent-ink);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 0.85rem; font-weight: 700;
-  }
+  .side-brand .mark { width: 28px; height: 28px; flex-shrink: 0; display: block; }
   .side-brand .name { font-size: 0.92rem; font-weight: 700; line-height: 1.2; }
   .side-brand .tag {
     font-size: 0.62rem; color: var(--sidebar-dim); background: var(--sidebar-hover);
@@ -139,8 +134,7 @@
     border-radius: 999px; padding: 1px 7px; font-variant-numeric: tabular-nums;
   }
   .nav-item.active .count { background: var(--accent); color: var(--accent-ink); }
-  .side-foot { margin-top: auto; padding: 0 10px; }
-  .side-foot .hint { font-size: 0.68rem; color: var(--sidebar-dim); line-height: 1.5; }
+
 
   /* ================= coluna direita ================= */
   .col { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
@@ -555,11 +549,7 @@
     padding: 28px; box-shadow: var(--menu-shadow);
   }
   .login-marca { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
-  .login-marca .mark {
-    width: 34px; height: 34px; border-radius: 9px; background: var(--accent);
-    color: var(--accent-ink); font-weight: 800; font-size: 1.05rem;
-    display: flex; align-items: center; justify-content: center;
-  }
+  .login-marca .mark { width: 36px; height: 36px; flex-shrink: 0; display: block; }
   .login-nome { font-weight: 700; font-size: 1.1rem; letter-spacing: -0.01em; }
   .login-sub { font-size: 0.86rem; color: var(--text-dim); line-height: 1.55; margin-bottom: 18px; }
   .btn.bloco { width: 100%; justify-content: center; }
@@ -567,7 +557,6 @@
     margin-top: 14px; font-size: 0.82rem; line-height: 1.5; color: var(--danger);
     border: 1px solid var(--danger); border-radius: var(--radius); padding: 10px 12px;
   }
-  .login-pe { margin-top: 18px; font-size: 0.76rem; color: var(--text-dim); line-height: 1.5; }
 
   /* ---- clientes e galeria do Drive ---- */
   .cliente-card { text-align: left; width: 100%; cursor: pointer; display: block; }
@@ -761,7 +750,6 @@
   .mz-cel { display: inline-flex; align-items: center; gap: 2px; cursor: pointer; }
   .mz-cel input { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
   .mz-cel input:disabled { cursor: default; opacity: .45; }
-  .mz-asterisco { color: var(--warn, var(--accent)); font-weight: 700; font-size: 0.8rem; }
 
   /* Uma linha por pessoa, que abre a matriz dela. Fechadas por padrão:
      com o time inteiro dentro, matrizes abertas virariam um muro. */
@@ -875,12 +863,17 @@
     display: grid; grid-template-columns: auto 1fr 1fr; gap: 10px 28px;
     align-items: start; margin-bottom: 18px;
   }
-  .calc-marca { font-size: 1.7rem; font-weight: 800; color: #f76e00; letter-spacing: -.02em; line-height: 1; }
-  .calc-cab { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-  .calc-cab-item { display: flex; align-items: baseline; gap: 6px; font-size: 0.8rem; font-weight: 700; color: #1d1d1b; }
-  .calc-cab-item > span:first-child { white-space: nowrap; }
-  .calc-cab-item .calc-in.txt { flex: 1 1 auto; font-weight: 500; }
-  .calc-cab-item .calc-val { font-weight: 500; }
+  .calc-marca { height: 34px; width: auto; display: block; margin-top: 2px; }
+  /* Rótulo numa coluna, campo na outra: os campos começam todos na mesma
+     linha vertical, em vez de cada um depois do tamanho do seu rótulo. */
+  .calc-cab {
+    display: grid; grid-template-columns: max-content minmax(0, 1fr);
+    gap: 4px 8px; align-items: center; min-width: 0;
+  }
+  .calc-cab-item { display: contents; font-size: 0.8rem; font-weight: 700; color: #1d1d1b; }
+  .calc-cab-item > span:first-child { white-space: nowrap; font-size: 0.8rem; font-weight: 700; }
+  .calc-cab-item .calc-in.txt { font-weight: 500; font-size: 0.8rem; }
+  .calc-cab-item .calc-val { font-weight: 500; font-size: 0.8rem; }
 
   .calc-tab {
     border-collapse: collapse; width: 100%;
@@ -890,11 +883,15 @@
     background: #f76e00; color: #ffffff; font-weight: 700; font-size: 0.88em;
     padding: 8px 4px; text-align: center; line-height: 1.2;
   }
+  /* Cabeçalho e valor no mesmo eixo: tudo centralizado na coluna, menos
+     a Praça, que é texto e alinha à esquerda nos dois. Antes o título
+     ficava no centro e o número na direita, e cada campo esticava até a
+     borda — a tabela parecia torta. */
   .calc-tab td {
-    padding: 4px 2px; border-bottom: 1px solid #ececea; text-align: right;
+    padding: 5px 4px; border-bottom: 1px solid #ececea; text-align: center;
     white-space: nowrap; color: #1d1d1b; vertical-align: middle;
   }
-  .calc-tab td:first-child { text-align: left; }
+  .calc-tab th:first-child, .calc-tab td:first-child { text-align: left; padding-left: 8px; }
   .calc-tab tr.slot2 td { background: #fbfaf8; }
   .calc-tab tfoot td { font-weight: 800; background: #f2f2f0; border-bottom: 0; }
   .calc-tab tfoot td:first-child { text-transform: uppercase; letter-spacing: .04em; }
@@ -902,9 +899,12 @@
   .calc-conta.forte { font-weight: 700; }
   .calc-deriv { color: #8a8a85; }
   .calc-val.dim { color: #8a8a85; }
-  /* "Digital 1:1 -" quebra linha acima do campo quando aperta: é a
-     coluna que mais segurava a tabela larga. */
-  .calc-ativos { display: inline-flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 2px 4px; white-space: nowrap; max-width: 140px; }
+  /* Campo + texto lado a lado ("Digital 1:1 - 50", "3 Dia(s)"). Só
+     quebra linha se a coluna apertar de verdade. */
+  .calc-ativos {
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-wrap: wrap; gap: 2px 5px; white-space: nowrap;
+  }
   .calc-acoes { text-align: center !important; }
   .calc-acoes .btn { padding: 2px 5px; display: flex; margin: 1px auto; }
 
@@ -916,25 +916,20 @@
   .calc-in {
     font: inherit; font-variant-numeric: tabular-nums; color: #1d1d1b; font-weight: 600;
     background: #fff1e4; border: 1px solid #f5c294; border-radius: 5px;
-    padding: 3px 5px; width: 100%; min-width: 56px; text-align: right;
+    padding: 3px 5px; width: 100%; min-width: 56px; text-align: center;
   }
-  .calc-in.largo { min-width: 70px; }
+  /* Na tabela o campo tem largura de campo, centrado na coluna — não
+     estica até a borda da célula. */
+  .calc-tab .calc-in { display: block; max-width: 96px; margin: 0 auto; }
+  .calc-tab .calc-in.largo { min-width: 70px; max-width: 124px; }
   .calc-in.txt { min-width: 60px; text-align: left; }
-  .calc-tab td:first-child .calc-in.txt { min-width: 56px; }
+  .calc-tab td:first-child .calc-in.txt { min-width: 56px; max-width: 120px; margin: 0; }
   select.calc-in { min-width: 88px; text-align: left; cursor: pointer; }
+  .calc-tab select.calc-in { max-width: 104px; }
   .calc-in:hover { border-color: #f76e00; background: #ffe6cf; }
   .calc-in:focus { outline: none; border-color: #f76e00; background: #ffffff; box-shadow: 0 0 0 2px #fcd3ae; }
-  .calc-ativos .calc-in { width: 42px; min-width: 42px; }
+  .calc-tab .calc-ativos .calc-in { display: inline-block; width: 44px; min-width: 44px; margin: 0; }
   .calc-cab-item .calc-in.txt { text-align: left; font-weight: 500; }
-  .calc-legenda {
-    display: flex; align-items: center; gap: 8px; margin: 10px 0 0;
-    font-size: 0.78rem; color: var(--text-dim);
-  }
-  .calc-legenda i {
-    display: inline-block; width: 26px; height: 14px; border-radius: 4px;
-    background: #fff1e4; border: 1px solid #f5c294;
-  }
-
   .calc-notas {
     list-style: none; margin: 16px 0 0; padding: 0;
     font-size: 0.7rem; color: #4a4a46; line-height: 1.6;
@@ -1131,3 +1126,25 @@
   .coment-btn.perigo:hover { border-color: var(--danger); color: var(--danger); }
   .coment-btn.perigo.cheio { background: var(--danger); border-color: var(--danger); color: #fff; }
   .coment-pergunta { font-size: 0.76rem; font-weight: 600; color: var(--danger); }
+
+  /* ---------- ordem do menu ---------- */
+  .ordem-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-width: 460px; }
+  .ordem-item {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 9px;
+    cursor: grab; user-select: none;
+  }
+  .ordem-item:active { cursor: grabbing; }
+  .ordem-item.arrastando { opacity: .45; }
+  .ordem-item.alvo { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .ordem-alca { color: var(--text-dim); letter-spacing: -2px; font-size: 0.8rem; }
+  .ordem-n {
+    width: 22px; height: 22px; border-radius: 50%; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--surface-2); color: var(--text-dim); font-size: 0.72rem; font-weight: 700;
+  }
+  .ordem-item:first-child .ordem-n { background: var(--accent); color: var(--accent-ink); }
+  .ordem-ico { width: 18px; text-align: center; color: var(--text-dim); }
+  .ordem-nome { font-size: 0.9rem; font-weight: 600; }
+  .ordem-setas { margin-left: auto; display: flex; gap: 2px; }
+  .ordem-setas .btn { padding: 3px 9px; }

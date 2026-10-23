@@ -286,7 +286,6 @@ export function PainelCartao({ quadroId, cartao, podeComentar, perfil }) {
               }}
             />
             <div className="coment-novo-pe">
-              <span>Enter envia · Shift+Enter pula linha</span>
               <button
                 className="btn sm primary"
                 type="button"

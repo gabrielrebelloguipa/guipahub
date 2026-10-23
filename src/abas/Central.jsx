@@ -292,11 +292,6 @@ function ImagensGuipa({ busca }) {
 
   return (
     <>
-      <div className="banner">
-        Render-base da moto, logos e referências oficiais — as imagens que se
-        colam em chat de IA ou numa apresentação. <b>São do time:</b> o que entra
-        aqui aparece para todo mundo.
-      </div>
 
       {podeFazer("central", "criar") && (
         <div className="chips">
@@ -683,15 +678,15 @@ export default function Central({ busca }) {
       <SobrasDoNavegador />
       <ErroBanco erro={central.erro} />
 
-      <Secao titulo="Materiais" sub="Logo, kit, apresentações — o que se baixa">
+      <Secao titulo="Materiais">
         <Materiais busca={busca} />
       </Secao>
 
-      <Secao titulo="Imagens GUIPA" sub="Referências e renders da frota">
+      <Secao titulo="Imagens GUIPA">
         <ImagensGuipa busca={busca} />
       </Secao>
 
-      <Secao titulo="Guias e medidas" sub="Cores, tipografia e as medidas de cada mídia">
+      <Secao titulo="Guias e medidas">
         <Guias busca={busca} />
       </Secao>
     </>

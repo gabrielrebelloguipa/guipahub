@@ -11,6 +11,7 @@ import {
   fmt,
 } from "../lib/calculo.js";
 import { exportarXlsx, exportarImagem } from "../lib/exporta.js";
+import logoGuipa from "../assets/logo-guipa.png";
 
 /* A proposta em andamento fica guardada no navegador de quem está
    montando: fechar a aba no meio de uma negociação não pode apagar o que
@@ -131,7 +132,7 @@ export default function Calculadora() {
     setExportando(tipo);
     try {
       if (tipo === "xlsx") {
-        await exportarXlsx({ modo, cab, pracas, especiais, premissas });
+        await exportarXlsx({ modo, cab, pracas, especiais, premissas, logoUrl: logoGuipa });
       } else {
         /* Troca os campos por texto, espera o navegador redesenhar, e só
            então fotografa. Sem a espera, a imagem sairia com as caixas
@@ -180,14 +181,10 @@ export default function Calculadora() {
 
       {erro && <div className="banner" style={{ borderColor: "var(--danger)" }}>{erro}</div>}
 
-      <div className="calc-legenda">
-        <i /> Campos em laranja podem ser alterados. O resto é calculado sozinho.
-      </div>
-
-      <div className="calc-rola" style={{ marginTop: 8 }}>
+      <div className="calc-rola" style={{ marginTop: 12 }}>
         <div className={"calc-folha" + (capturando ? " capturando" : "")} ref={folha}>
           <div className="calc-topo">
-            <div className="calc-marca">GUIPA</div>
+            <img className="calc-marca" src={logoGuipa} alt="GUIPA" />
             <div className="calc-cab">
               {[
                 ["agencia", "Agência"], ["cliente", "Cliente"], ["campanha", "Campanha"], ["periodo", "Período"],

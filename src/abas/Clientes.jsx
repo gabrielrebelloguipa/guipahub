@@ -419,7 +419,7 @@ export default function Imagens({ busca }) {
             ? "procurando…"
             : emBusca
             ? `${achados.pastas.length} pastas e ${achados.arquivos.length} arquivos`
-            : "A busca começa a partir de duas letras, em qualquer profundidade."}
+            : ""}
         </div>
       </div>
 

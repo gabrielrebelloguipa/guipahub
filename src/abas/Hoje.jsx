@@ -203,7 +203,6 @@ export default function Hoje({ aoIrPara }) {
               </div>
             </div>
           ))}
-          <div className="sub">Clique direito num atalho para editar ou excluir.</div>
         </div>
 
         <div className="card">

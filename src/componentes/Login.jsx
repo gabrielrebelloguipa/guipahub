@@ -1,6 +1,7 @@
 import { DOMINIO_OK } from "../config.js";
 import { useAuth } from "../lib/useAuth.js";
 import { pedirToken } from "../lib/auth.js";
+import simbolo from "../assets/simbolo-guipa.png";
 
 /* Um botão. Só isso.
 
@@ -19,12 +20,12 @@ export default function Login() {
     <div id="loginRoot">
       <div className="login-card">
         <div className="login-marca">
-          <div className="mark">G</div>
+          <img className="mark" src={simbolo} alt="GUIPA" />
           <div className="login-nome">GuipaHub</div>
         </div>
 
         <div className="login-sub">
-          Acesso interno da GUIPA. Entre com a sua conta @{DOMINIO_OK}.
+          Conta @{DOMINIO_OK}
         </div>
 
         <button
@@ -37,11 +38,6 @@ export default function Login() {
         </button>
 
         {auth.erro && <div className="login-erro">{auth.erro}</div>}
-
-        <div className="login-pe">
-          O site lê o Drive com a sua própria conta — você vê exatamente as
-          pastas que já vê no Drive, nem mais nem menos.
-        </div>
       </div>
     </div>
   );

@@ -1,26 +1,17 @@
 import { useEstado, statusInfo } from "../lib/estado.js";
 import { useCompartilhado } from "../lib/compartilhado.js";
 import { useCentral } from "../lib/central.js";
-import { usePermissoes, ABAS, abasDe } from "../lib/permissoes.js";
-
-/* A lista canônica agora mora em permissoes.js, para a tela de
-   permissões e a sidebar nunca discordarem sobre quais abas existem. */
-export const SECOES = ABAS;
-
-export const ABA_CONFIG = { key: "config", label: "Configurações", ico: "⚙" };
+import { useMenu } from "../lib/menu.js";
+import simbolo from "../assets/simbolo-guipa.png";
 
 export default function Sidebar({ secao, aoTrocar }) {
   const estado = useEstado();
   const compartilhado = useCompartilhado();
   const central = useCentral();
-  const { eu, abasPadrao, permissoesPadrao } = usePermissoes();
-
-  /* Configurações só aparece para admin. Não é tranca — é tirar da
-     frente de quem não tem o que fazer ali; o banco recusa a escrita
-     de quem não é admin de qualquer jeito. */
-  const visiveis = abasDe(eu, abasPadrao, permissoesPadrao);
-  const lista = SECOES.filter((s) => visiveis.includes(s.key));
-  if (eu?.admin) lista.push(ABA_CONFIG);
+  /* Abas permitidas, na ordem que a pessoa escolheu. Configurações
+     aparece para todo mundo por causa da ordem do menu; o resto dela
+     (permissões, Drive…) só admin vê. */
+  const lista = useMenu().todas;
 
   /* Cartão em coluna de concluído não conta como pendente — é o que faz
      "Finalizadas" se comportar direito sem regra especial. */
@@ -37,7 +28,7 @@ export default function Sidebar({ secao, aoTrocar }) {
   return (
     <aside className="sidebar">
       <div className="side-brand">
-        <div className="mark">G</div>
+        <img className="mark" src={simbolo} alt="GUIPA" />
         <div>
           <div className="name">GuipaHub</div>
           <div className="tag">interno</div>
@@ -61,12 +52,6 @@ export default function Sidebar({ secao, aoTrocar }) {
           );
         })}
       </nav>
-
-      <div className="side-foot">
-        <div className="hint">
-          Imagens vêm do Drive. Kanban de marcas, Marcas e Central são do time.
-        </div>
-      </div>
     </aside>
   );
 }

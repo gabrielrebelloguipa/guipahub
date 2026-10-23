@@ -57,7 +57,7 @@ function borda(cel) {
   cel.alignment = { ...(cel.alignment || {}), vertical: "middle" };
 }
 
-function blocoDeTopo(ws, cab, col1, col2) {
+function blocoDeTopo(ws, cab, col1, col2, logoId) {
   const linhas = [
     [`Agência: ${cab.agencia || ""}`, `Atendimento Comercial: ${cab.atendimento || ""}`],
     [`Cliente: ${cab.cliente || ""}`, `E-mail: ${cab.email || ""}`],
@@ -74,8 +74,15 @@ function blocoDeTopo(ws, cab, col1, col2) {
     ws.getCell("H3").value = `Período: ${cab.periodo}`;
     ws.getCell("H3").font = { bold: true, size: 10 };
   }
-  ws.getCell("B2").value = "GUIPA";
-  ws.getCell("B2").font = { bold: true, size: 20, color: { argb: LARANJA } };
+  /* Logo oficial quando o navegador conseguiu carregá-la; o texto fica
+     só como reserva (e para o teste fora do navegador, que não tem a
+     imagem). Proporção da logo: 4,33 por 1. */
+  if (logoId != null) {
+    ws.addImage(logoId, { tl: { col: 1, row: 1 }, ext: { width: 143, height: 33 } });
+  } else {
+    ws.getCell("B2").value = "GUIPA";
+    ws.getCell("B2").font = { bold: true, size: 20, color: { argb: LARANJA } };
+  }
 }
 
 function notasAoFim(ws, linha, notas) {
@@ -88,14 +95,14 @@ function notasAoFim(ws, linha, notas) {
 
 /* ---------- Circuito ---------- */
 
-function folhaCircuito(wb, cab, pracas, P) {
+function folhaCircuito(wb, cab, pracas, P, logoId) {
   const ws = wb.addWorksheet("CIRCUITO SP_RJ", { views: [{ showGridLines: false }] });
   ws.columns = [
     { width: 2.6 }, { width: 10 }, { width: 18.7 }, { width: 13 }, { width: 12 },
     { width: 15 }, { width: 17 }, { width: 16 }, { width: 10.5 }, { width: 17 },
     { width: 17 }, { width: 15 }, { width: 15 }, { width: 12 },
   ];
-  blocoDeTopo(ws, cab, "D", "J");
+  blocoDeTopo(ws, cab, "D", "J", logoId);
 
   const cab8 = ["Praça", "Ativos / Circuito", "Faces / Ativos", "Período", "Inserções / Dia",
     "Inserções no período", "Valor Tabela", "Desconto", "Valor Negociado", "Valor Líquido",
@@ -171,14 +178,14 @@ function folhaCircuito(wb, cab, pracas, P) {
 
 /* ---------- Projetos Especiais ---------- */
 
-function folhaEspeciais(wb, cab, entrada, P) {
+function folhaEspeciais(wb, cab, entrada, P, logoId) {
   const ws = wb.addWorksheet("PROJETOS ESPECIAIS", { views: [{ showGridLines: false }] });
   ws.columns = [
     { width: 5.2 }, { width: 14 }, { width: 8 }, { width: 9 }, { width: 13 },
     { width: 12 }, { width: 15 }, { width: 16 }, { width: 15 }, { width: 15 },
     { width: 11 }, { width: 16 }, { width: 16 }, { width: 16 },
   ];
-  blocoDeTopo(ws, cab, "D", "J");
+  blocoDeTopo(ws, cab, "D", "J", logoId);
   ws.getCell("B7").value = "1 Dia";
   ws.getCell("B7").font = { bold: true, size: 9, color: { argb: "FF888888" } };
 
@@ -251,21 +258,28 @@ function folhaEspeciais(wb, cab, entrada, P) {
 /* Separado do download para poder ser testado fora do navegador: o
    teste monta a planilha, relê o arquivo gerado e confere fórmula por
    fórmula, sem precisar baixar nada. */
-export async function montarPlanilha({ modo, cab, pracas, especiais, premissas }) {
+export async function montarPlanilha({ modo, cab, pracas, especiais, premissas, logo }) {
   const mod = await import("exceljs");
   const ExcelJS = mod.default || mod;
   const wb = new ExcelJS.Workbook();
   wb.creator = cab.atendimento || "GuipaHub";
   wb.created = new Date();
   const P = { ...PREMISSAS_PADRAO, ...(premissas || {}) };
-  if (modo === "circuito") folhaCircuito(wb, cab, pracas, P);
-  else folhaEspeciais(wb, cab, especiais, P);
+  const logoId = logo ? wb.addImage({ buffer: logo, extension: "png" }) : null;
+  if (modo === "circuito") folhaCircuito(wb, cab, pracas, P, logoId);
+  else folhaEspeciais(wb, cab, especiais, P, logoId);
   return wb.xlsx.writeBuffer();
 }
 
 export async function exportarXlsx(dados) {
-  const { modo, cab } = dados;
-  const buf = await montarPlanilha(dados);
+  const { modo, cab, logoUrl } = dados;
+  let logo = null;
+  try {
+    if (logoUrl) logo = await (await fetch(logoUrl)).arrayBuffer();
+  } catch {
+    /* sem a logo a planilha sai com o nome em texto */
+  }
+  const buf = await montarPlanilha({ ...dados, logo });
   baixar(
     new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
     nomeArquivo(cab, modo, "xlsx")

@@ -120,9 +120,6 @@ export default function Kanban({ busca }) {
 
       {modo === "pessoal" ? (
         <>
-          <div className="sub" style={{ marginBottom: 12 }}>
-            Só você vê este quadro. É a sua rotina.
-          </div>
           <Quadro
             listas={estado.listas}
             demandas={estado.demandas}
