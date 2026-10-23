@@ -5,7 +5,7 @@
 -- 1. O 17 decide quem exclui pelo autor (criado_por). Mas a política de
 --    UPDATE deixa quem edita mexer em qualquer coluna — bastava trocar o
 --    criado_por para o próprio e-mail e o cartão do colega virava "seu".
---    Este gatilho trava autor e data de criação numa edição.
+--    Este gatilho trava o autor numa edição.
 -- 2. O pedido é "quem criou pode apagar o próprio". O padrão do time
 --    estava com Excluir desligado, então ninguém além do admin apagava
 --    nem o próprio cartão. Liga no padrão (quem tem exceção própria
