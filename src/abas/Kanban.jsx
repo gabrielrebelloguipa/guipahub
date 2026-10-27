@@ -132,7 +132,11 @@ export default function Kanban({ busca }) {
         !REMOTO ? (
           <Quadro listas={estado.listas} demandas={estado.demandas} api={apiLocal} busca={busca} />
         ) : !pessoal?.carregado || !apiPessoal ? (
-          <div className="empty">Carregando…</div>
+          compartilhado.erro ? (
+            <div className="banner" style={{ borderColor: "var(--danger)" }}>{compartilhado.erro}</div>
+          ) : (
+            <div className="empty">Carregando…</div>
+          )
         ) : (
           <Quadro listas={pessoal.listas} demandas={pessoal.demandas} api={apiPessoal} busca={busca} />
         )

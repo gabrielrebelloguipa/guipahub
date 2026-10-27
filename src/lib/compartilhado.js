@@ -156,6 +156,7 @@ async function carregarRemoto() {
 
 /* Colunas e cartões de UM quadro. Chamado quando o quadro é aberto. */
 const lendoQuadro = new Set();
+const tentativas = new Map();
 export async function carregarQuadro(id, forcar = false) {
   if (!REMOTO || !id || lendoQuadro.has(id)) return;
   const q = (estado.quadros || []).find((x) => x.id === id);
@@ -167,7 +168,16 @@ export async function carregarQuadro(id, forcar = false) {
   ]);
   lendoQuadro.delete(id);
   const err = rl.error || rc.error;
-  if (err) return definir({ erro: explicarErro(err) });
+  if (err) {
+    /* Falha de rede ou sessão sendo renovada: tenta de novo sozinho
+       algumas vezes antes de mostrar o erro — senão o quadro ficaria em
+       "Carregando…" para sempre. */
+    const n = (tentativas.get(id) || 0) + 1;
+    tentativas.set(id, n);
+    if (n <= 3) return void setTimeout(() => carregarQuadro(id, true), 1500 * n);
+    return definir({ erro: explicarErro(err) });
+  }
+  tentativas.delete(id);
   mexerQuadro(id, (x) => ({
     ...x,
     listas: (rl.data || []).map(deLista),
@@ -177,9 +187,13 @@ export async function carregarQuadro(id, forcar = false) {
 }
 
 /* O quadro pessoal de quem está logado (o banco cria na primeira vez). */
-async function iniciarMeuQuadro() {
+async function iniciarMeuQuadro(tentativa = 1) {
   const { data, error } = await supabase.rpc("meu_quadro_pessoal");
-  if (error || !data) return;
+  if (error || !data) {
+    if (tentativa <= 3) setTimeout(() => iniciarMeuQuadro(tentativa + 1), 1500 * tentativa);
+    else definir({ erro: error ? explicarErro(error) : "Não consegui abrir o seu quadro." });
+    return;
+  }
   if (!(estado.quadros || []).some((q) => q.id === data)) {
     definir({ quadros: [...(estado.quadros || []), { id: data, marcaId: null, dono: "", listas: [], demandas: [], carregado: false }] });
   }
