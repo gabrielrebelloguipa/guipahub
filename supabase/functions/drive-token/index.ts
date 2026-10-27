@@ -11,6 +11,8 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const ORIGENS = ["https://guipahub.onrender.com", "http://localhost:5173"];
 const DOMINIO = "@guipabrasil.com";
+// Client ID do Google é público (vai na URL do login); só o segredo é segredo.
+const CLIENT_ID = "456829931509-4n1jdkj2i2aco1hp1slqruipv8jp477m.apps.googleusercontent.com";
 
 function cabecalhos(origem: string) {
   return {
@@ -68,7 +70,7 @@ Deno.serve(async (req) => {
     .maybeSingle();
   if (!linha) return resp(404, { erro: "sem_token" });
 
-  const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
+  const clientId = Deno.env.get("GOOGLE_CLIENT_ID") || CLIENT_ID;
   const segredo = Deno.env.get("GOOGLE_CLIENT_SECRET");
   if (!clientId || !segredo) return resp(503, { erro: "sem_segredo" });
 
