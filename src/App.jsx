@@ -7,6 +7,7 @@ import Login from "./componentes/Login.jsx";
 const Hoje = lazy(() => import("./abas/Hoje.jsx"));
 const Kanban = lazy(() => import("./abas/Kanban.jsx"));
 const Central = lazy(() => import("./abas/Central.jsx"));
+const Calendario = lazy(() => import("./abas/Calendario.jsx"));
 const Marcas = lazy(() => import("./abas/Marcas.jsx"));
 const Imagens = lazy(() => import("./abas/Clientes.jsx"));
 const Prompts = lazy(() => import("./abas/Prompts.jsx"));
@@ -32,6 +33,7 @@ const TITULOS = {
   hoje: ["Bom trabalho", ""],
   demandas: ["Kanban", ""],
   central: ["Central Guipa", ""],
+  calendario: ["Calendário Comercial", ""],
   marcas: ["Marcas", ""],
   clientes: ["Imagens", ""],
   prompts: ["Prompts", ""],
@@ -155,6 +157,7 @@ export default function App() {
             {secao === "hoje" && <Hoje aoIrPara={setSecao} />}
             {secao === "demandas" && <Kanban busca={busca} />}
             {secao === "central" && <Central busca={busca} />}
+            {secao === "calendario" && <Calendario busca={busca} />}
             {secao === "marcas" && <Marcas busca={busca} />}
             {secao === "clientes" && <Imagens busca={busca} />}
             {secao === "prompts" && <Prompts busca={busca} />}

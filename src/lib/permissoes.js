@@ -21,6 +21,7 @@ export const ABAS = [
   { key: "hoje", label: "Hoje", ico: "◉" },
   { key: "demandas", label: "Kanban", ico: "≡" },
   { key: "central", label: "Central Guipa", ico: "◆" },
+  { key: "calendario", label: "Calendário Comercial", ico: "▦" },
   { key: "marcas", label: "Marcas", ico: "◑" },
   /* A chave continua "clientes" de proposito: ela esta gravada nas
      permissoes de cada pessoa no banco. Trocar a chave apagaria a
@@ -45,6 +46,7 @@ export const AREAS = [
     acoes: ["ver", "criar", "editar", "mover", "comentar", "excluir", "excluir_outros"],
   },
   { key: "central", label: "Central Guipa", acoes: ["ver", "criar", "editar", "excluir"] },
+  { key: "calendario", label: "Calendário Comercial", acoes: ["ver", "criar", "editar", "excluir"] },
   { key: "marcas", label: "Marcas", acoes: ["ver", "criar", "editar", "excluir"] },
   { key: "clientes", label: "Imagens", acoes: ["ver", "baixar"] },
   { key: "prompts", label: "Prompts", acoes: ["ver", "publicar", "editar", "excluir"] },
@@ -76,12 +78,13 @@ export const ACOES_SEM_TRANCA = { demandas: ["mover"] };
    banco manda; este aqui so aparece no piscar antes da resposta, e
    discordar dele faria a sidebar trocar de tamanho na frente da
    pessoa. Marcas e Prompts ficam de fora ate estarem prontas. */
-const ABAS_PADRAO_INICIAL = ["hoje", "demandas", "central", "clientes", "calculadora"];
+const ABAS_PADRAO_INICIAL = ["hoje", "demandas", "central", "calendario", "clientes", "calculadora"];
 
 const PERMISSOES_PADRAO_INICIAL = {
   hoje: { ver: true },
   demandas: { ver: true, criar: true, editar: true, mover: true, comentar: true, excluir: true, excluir_outros: false, colunas: false },
   central: { ver: true, criar: false, editar: false, excluir: false },
+  calendario: { ver: true, criar: false, editar: false, excluir: false },
   marcas: { ver: false, criar: false, editar: false, excluir: false },
   clientes: { ver: true, baixar: true },
   prompts: { ver: false, publicar: false, editar: false, excluir: false },
