@@ -142,7 +142,7 @@ export default function App() {
     <div className="shell">
       <Sidebar secao={secao} aoTrocar={setSecao} />
       <div className="col">
-        <Topbar busca={busca} aoBuscar={setBusca} />
+        <Topbar busca={busca} aoBuscar={setBusca} aoIrPara={setSecao} />
         <div className="main">
           <div className="head">
             <div id="hLeft">
