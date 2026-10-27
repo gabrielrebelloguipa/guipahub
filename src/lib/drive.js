@@ -24,6 +24,8 @@ import {
   marcarVerificando,
   marcarAcessoDrive,
   tokenRecusado,
+  renovarEmSilencio,
+  marcarTokenVencido,
 } from "./auth.js";
 
 const API = "https://www.googleapis.com/drive/v3/";
@@ -83,7 +85,7 @@ function qs(params) {
     .join("&");
 }
 
-async function pedir(recurso, params) {
+async function pedir(recurso, params, segunda = false) {
   const r = await fetch(API + recurso + "?" + qs(params), {
     headers: { Authorization: "Bearer " + pegarToken() },
   });
@@ -95,8 +97,12 @@ async function pedir(recurso, params) {
        Tratar os dois como "erro" mandava a pessoa relogar à toa. */
     const j = await r.json().catch(() => ({}));
     if (r.status === 401) {
-      /* Token vencido ou morto. Em vez de mostrar a mensagem crua do
-         Google, renova e explica o que está acontecendo. */
+      /* Token vencido: renova em silêncio e tenta de novo, uma vez. */
+      if (!segunda) {
+        marcarTokenVencido();
+        if (await renovarEmSilencio()) return pedir(recurso, params, true);
+      }
+      /* Não deu: mesmo caminho de antes, uma ida ao Google. */
       tokenRecusado();
       const e = new Error("Sua sessão do Google venceu. Renovando o acesso — a página volta em instantes.");
       e.status = 401;

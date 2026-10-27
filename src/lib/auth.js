@@ -154,11 +154,79 @@ function guardarProviderToken(t) {
 
 /* O Drive recusou o token (401). Vale mais que qualquer relógio nosso:
    marca como morto e vai buscar um novo, sem perguntar nada. */
+/* O Drive recusou: o token não serve mais, mas ainda sem decidir como
+   renovar (quem chama tenta em silêncio primeiro). */
+export function marcarTokenVencido() {
+  marcarMorto(providerToken);
+  guardarProviderToken("");
+}
+
 export function tokenRecusado() {
   marcarMorto(providerToken);
   guardarProviderToken("");
-  mudar({ expirou: true });
-  renovarAcessoDrive();
+  renovarEmSilencio().then((ok) => {
+    if (ok) return mudar({ expirou: false });
+    mudar({ expirou: true });
+    renovarAcessoDrive();
+  });
+}
+
+/* ---------- renovação sem ida ao Google ---------- */
+
+/* A função drive-token (supabase/functions) guarda o refresh token de
+   cada pessoa e troca por um acesso novo com o segredo do cliente Google,
+   que não pode morar aqui. Sem piscar: é uma chamada comum.
+
+   Falhando (pessoa sem refresh token guardado, acesso retirado no
+   Google, função fora do ar), o caminho antigo continua valendo: uma ida
+   ao Google. Se o motivo foi não ter refresh token, essa ida pede o
+   consentimento, que é o que faz o Google entregar um — uma vez só. */
+const REFRESH_ENVIADO_KEY = "guipahub_refresh_enviado";
+let pedirConsentimento = false;
+let renovando = null;
+
+export function renovarEmSilencio() {
+  if (!supabase || !temSessao()) return Promise.resolve(false);
+  if (renovando) return renovando;
+  renovando = (async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke("drive-token", { body: {} });
+      if (error || !data?.access_token) {
+        let motivo = "";
+        try {
+          motivo = (await error?.context?.json())?.erro || "";
+        } catch {
+          /* resposta sem corpo: motivo desconhecido */
+        }
+        pedirConsentimento = motivo === "sem_token" || motivo === "invalid_grant";
+        return false;
+      }
+      return guardarProviderToken(data.access_token);
+    } catch {
+      return false;
+    } finally {
+      setTimeout(() => (renovando = null), 0);
+    }
+  })();
+  return renovando;
+}
+
+/* O refresh token só vem na volta do Google, e só quando a pessoa
+   consente. Vai direto para a função e não fica no navegador. */
+function guardarRefresh(rt) {
+  try {
+    if (localStorage.getItem(REFRESH_ENVIADO_KEY) === digital(rt)) return;
+  } catch {
+    /* sem localStorage: manda de novo, não faz mal */
+  }
+  supabase.functions.invoke("drive-token", { body: { guardar: rt } }).then(({ error }) => {
+    if (error) return;
+    try {
+      localStorage.setItem(REFRESH_ENVIADO_KEY, digital(rt));
+    } catch {
+      /* idem */
+    }
+  });
 }
 
 /* Fica fora do estado observável: muda sozinho e não tem nada a ver com
@@ -281,7 +349,11 @@ export async function pedirToken(silencioso, depois) {
         provider: "google",
         options: {
           scopes: ESCOPOS_DRIVE,
-          queryParams: { hd: DOMINIO_OK },
+          queryParams: {
+            hd: DOMINIO_OK,
+            access_type: "offline",
+            ...(pedirConsentimento ? { prompt: "consent" } : {}),
+          },
           redirectTo: window.location.origin,
         },
       })
@@ -302,11 +374,17 @@ export function comToken(fn) {
     fn();
     return;
   }
-  /* O Supabase nao renova o provider_token, entao renovar significa uma
-     ida ao Google. Sem a tela de consentimento isso virou um piscar de
-     redirecionamento, e nao vale incomodar a pessoa com um botao. */
-  if (renovarAcessoDrive()) return;
-  mudar({ expirou: true });
+  /* Primeiro em silêncio, pela função drive-token. Só se ela não
+     resolver é que se vai ao Google (o piscar). */
+  renovarEmSilencio().then((ok) => {
+    if (ok) {
+      if (estado.expirou) mudar({ expirou: false });
+      fn();
+      return;
+    }
+    if (renovarAcessoDrive()) return;
+    mudar({ expirou: true });
+  });
 }
 
 /* Uma ida ao Google para buscar token novo do Drive, sem perguntar nada.
@@ -370,6 +448,7 @@ function aplicarSessao(sessao) {
   /* So destranca a renovacao automatica quando chegou token BOM. Se o
      Supabase devolveu o token velho de sempre (morto), o trinco fica
      como esta -- senao uma volta do Google sem token novo viraria laco. */
+  if (sessao.provider_refresh_token) guardarRefresh(sessao.provider_refresh_token);
   if (sessao.provider_token && guardarProviderToken(sessao.provider_token)) {
     try {
       sessionStorage.removeItem(RENOVOU_KEY);
