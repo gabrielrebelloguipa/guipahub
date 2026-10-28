@@ -55,12 +55,12 @@ async function carregar() {
       supabase.from("calendario_comentarios").select("*").order("criado_em").order("id")
     ),
   ]);
-  const err = r.error || rc.error;
-  if (err) {
-    definir({ carregando: false, erro: explicarErro(err) });
+  if (r.error) {
+    definir({ carregando: false, erro: explicarErro(r.error) });
     return;
   }
-  definir({ itens: r.data || [], comentarios: rc.data || [], carregando: false, erro: "" });
+  /* Comentário que não carregou não esconde o calendário. */
+  definir({ itens: r.data || [], comentarios: rc.error ? [] : rc.data || [], carregando: false, erro: "" });
 }
 
 let iniciado = false;
