@@ -220,6 +220,7 @@
 
   /* ================= main ================= */
   .main { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 22px 24px 0; overflow: hidden; }
+  .head { margin-bottom: 18px; }
   .header { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; }
   .h-left { min-width: 0; }
   .h-right { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -1256,7 +1257,12 @@
   .c-mkt { --cat: #3f8f55; }
   .c-pr { --cat: #c08a1e; }
 
-  .cal-barra { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+  /* Fica no topo ao rolar, para trocar de semestre sem voltar lá em cima. */
+  .cal-barra {
+    position: sticky; top: 0; z-index: 4;
+    display: flex; align-items: center; gap: 8px;
+    padding-bottom: 14px; background: var(--bg);
+  }
   .cal-periodo { font-size: 1rem; font-weight: 700; min-width: 132px; text-align: center; }
 
   .cal-grade {

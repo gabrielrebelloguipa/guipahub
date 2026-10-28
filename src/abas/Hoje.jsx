@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useEstado, alterar, uid } from "../lib/estado.js";
-import { fmtData, diasAte, categoriaPrompt } from "../lib/constantes.js";
+import { fmtData, diasAte } from "../lib/constantes.js";
 import Modal from "../componentes/Modal.jsx";
-import { usePrompts } from "../lib/prompts.js";
 import { useCompartilhado as useCompartilhadoHoje, meuQuadro, infoDaLista, REMOTO } from "../lib/compartilhado.js";
 
 function FormAtalho({ inicial, aoFechar }) {
@@ -98,14 +97,6 @@ export default function Hoje({ aoIrPara }) {
       return n !== null && n <= 3;
     })
     .sort((a, b) => (a.prazo || "").localeCompare(b.prazo || ""));
-
-  /* Favoritos: os prompts da pessoa marcados com ★ e os do time que ela
-     favoritou na biblioteca. */
-  const { meus, favoritos: favDoTime } = usePrompts();
-  const favoritos = [
-    ...meus.filter((p) => p.favorito),
-    ...(compartilhadoHoje.biblioteca || []).filter((b) => favDoTime.includes(b.id)),
-  ];
 
   const grupos = {};
   for (const a of estado.atalhos) {
@@ -214,41 +205,6 @@ export default function Hoje({ aoIrPara }) {
           ))}
         </div>
 
-        <div className="card">
-          <div className="card-h">
-            <div className="t">Prompts favoritos</div>
-            <div className="a">
-              <button className="link" type="button" onClick={() => aoIrPara("prompts")}>
-                ver todos →
-              </button>
-            </div>
-          </div>
-          {!favoritos.length ? (
-            <div className="empty">Nenhum favorito.</div>
-          ) : (
-            <div className="list">
-              {favoritos.map((p) => {
-                const cat = categoriaPrompt(p.categoria);
-                return (
-                  <button className="row" key={p.id} onClick={() => aoIrPara("prompts")}>
-                    <div className="bar" style={{ background: cat.cor }} />
-                    <div className="body">
-                      <div className="ttl">{p.titulo}</div>
-                      {(p.ferramenta || p.modelo) && (
-                        <div className="meta">
-                          <span>
-                            ▷ {p.ferramenta}
-                            {p.modelo ? " · " + p.modelo : ""}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
       </div>
 
       {criandoAtalho && <FormAtalho aoFechar={() => setCriandoAtalho(false)} />}
