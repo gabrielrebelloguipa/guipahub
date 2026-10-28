@@ -39,7 +39,7 @@ function iniciais(nome) {
   return ((p[0]?.[0] || "") + (p.length > 1 ? p[p.length - 1][0] : "")).toUpperCase();
 }
 
-function Avatar({ email, nome }) {
+export function Avatar({ email, nome }) {
   return (
     <span className="coment-avatar" style={{ background: corDe(email) }}>
       {iniciais(nome)}
@@ -93,7 +93,9 @@ function Linha({ e, comTitulo }) {
    auditoria (Configurações), que só admin lê. Mesmo assim excluir pede
    um segundo clique: a auditoria guarda o texto, mas quem apagou sem
    querer não sabe disso. */
-function Comentario({ e, meuEmail, souAdmin, aoMudar }) {
+export function Comentario({ e, meuEmail, souAdmin, aoMudar, api }) {
+  const editar = api?.editar || editarComentario;
+  const excluirC = api?.excluir || excluirComentario;
   const [editando, setEditando] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
   const [texto, setTexto] = useState(e.texto);
@@ -107,7 +109,7 @@ function Comentario({ e, meuEmail, souAdmin, aoMudar }) {
     if (!texto.trim()) return;
     if (texto.trim() === e.texto) return setEditando(false);
     setOcupado(true);
-    const r = await editarComentario(e.id, texto);
+    const r = await editar(e.id, texto);
     setOcupado(false);
     if (!r.ok) return setErro(r.erro);
     setEditando(false);
@@ -117,7 +119,7 @@ function Comentario({ e, meuEmail, souAdmin, aoMudar }) {
 
   async function excluir() {
     setOcupado(true);
-    const r = await excluirComentario(e.id);
+    const r = await excluirC(e.id);
     setOcupado(false);
     if (!r.ok) {
       setConfirmando(false);

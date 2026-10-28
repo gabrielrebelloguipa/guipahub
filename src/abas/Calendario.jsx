@@ -1,15 +1,22 @@
 import { useEffect, useState } from "react";
-import Modal from "../componentes/Modal.jsx";
-import { usePode } from "../lib/permissoes.js";
+import Modal, { Confirmar } from "../componentes/Modal.jsx";
+import { Avatar, Comentario } from "../componentes/Historico.jsx";
+import { usePode, usePermissoes } from "../lib/permissoes.js";
+import { useAuth } from "../lib/useAuth.js";
+import { MESES } from "../lib/constantes.js";
 import {
   CATEGORIAS,
   useCalendario,
   iniciarCalendario,
   salvarItem,
   excluirItem,
+  comentarItem,
+  editarComentarioItem,
+  excluirComentarioItem,
 } from "../lib/calendario.js";
 
 const CURTO = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+const CAT = Object.fromEntries(CATEGORIAS.map((c) => [c.key, c]));
 
 /* "2026-07-01" — o banco guarda o mês como o dia 1. */
 const chaveMes = (ano, m) => `${ano}-${String(m + 1).padStart(2, "0")}-01`;
@@ -35,40 +42,56 @@ function useEstreito() {
   return v;
 }
 
+const nomeDoMes = (mes) => {
+  const [a, m] = String(mes).split("-").map(Number);
+  return MESES[m - 1] ? `${MESES[m - 1]} de ${a}` : "";
+};
+const dataBr = (d) => (d ? d.split("-").reverse().join("/") : "");
+function periodo(i) {
+  if (i.inicio && i.fim && i.inicio !== i.fim) return `${dataBr(i.inicio)} a ${dataBr(i.fim)}`;
+  return dataBr(i.inicio || i.fim);
+}
+const linkSeguro = (u) => (/^https?:\/\//i.test(u) ? u : "https://" + u);
+
 export default function Calendario({ busca }) {
-  const { itens, carregando, erro } = useCalendario();
+  const { itens, comentarios, carregando, erro } = useCalendario();
   const podeFazer = usePode();
   const podeCriar = podeFazer("calendario", "criar");
-  const podeEditar = podeFazer("calendario", "editar");
   const estreito = useEstreito();
   const hoje = new Date();
   const mesAtual = chaveMes(hoje.getFullYear(), hoje.getMonth());
-  const [periodo, setPeriodo] = useState(() => semestreDe(hoje));
-  const [form, setForm] = useState(null);
+  const [periodoAtual, setPeriodo] = useState(() => semestreDe(hoje));
+  /* { id } abre um item; { novo: { mes, categoria } } abre um em branco */
+  const [aberto, setAberto] = useState(null);
 
   useEffect(() => {
     iniciarCalendario();
   }, []);
 
   const meses = Array.from({ length: 6 }, (_, i) => {
-    const m = periodo.sem * 6 + i;
-    return { chave: chaveMes(periodo.ano, m), rotulo: CURTO[m], ano: periodo.ano };
+    const m = periodoAtual.sem * 6 + i;
+    return { chave: chaveMes(periodoAtual.ano, m), rotulo: CURTO[m], ano: periodoAtual.ano };
   });
   const noSemestreAtual =
-    periodo.ano === hoje.getFullYear() && periodo.sem === (hoje.getMonth() < 6 ? 0 : 1);
+    periodoAtual.ano === hoje.getFullYear() && periodoAtual.sem === (hoje.getMonth() < 6 ? 0 : 1);
 
   const termo = (busca || "").trim().toLowerCase();
   const daCelula = (mes, cat) => itens.filter((i) => i.mes === mes && i.categoria === cat);
+  const nComent = {};
+  for (const c of comentarios) nComent[c.item_id] = (nComent[c.item_id] || 0) + 1;
 
   function Item({ i }) {
     const fora = termo && !i.titulo.toLowerCase().includes(termo);
-    const cls = "cal-item c-" + i.categoria + (fora ? " fora" : "");
-    return podeEditar ? (
-      <button type="button" className={cls} onClick={() => setForm(i)}>
+    const n = nComent[i.id] || 0;
+    return (
+      <button
+        type="button"
+        className={"cal-item c-" + i.categoria + (fora ? " fora" : "")}
+        onClick={() => setAberto({ id: i.id })}
+      >
         {i.titulo}
+        {n > 0 && <span className="cal-item-n">❝ {n}</span>}
       </button>
-    ) : (
-      <div className={cls}>{i.titulo}</div>
     );
   }
 
@@ -79,7 +102,7 @@ export default function Calendario({ busca }) {
         type="button"
         className="cal-add"
         aria-label="Adicionar"
-        onClick={() => setForm({ mes, categoria, titulo: "" })}
+        onClick={() => setAberto({ novo: { mes, categoria } })}
       >
         +
       </button>
@@ -88,13 +111,13 @@ export default function Calendario({ busca }) {
 
   const barra = (
     <div className="cal-barra">
-      <button className="btn sm" type="button" aria-label="Semestre anterior" onClick={() => setPeriodo(andar(periodo, -1))}>
+      <button className="btn sm" type="button" aria-label="Semestre anterior" onClick={() => setPeriodo(andar(periodoAtual, -1))}>
         ‹
       </button>
       <div className="cal-periodo">
-        {periodo.sem ? "Jul – Dez" : "Jan – Jun"} {periodo.ano}
+        {periodoAtual.sem ? "Jul – Dez" : "Jan – Jun"} {periodoAtual.ano}
       </div>
-      <button className="btn sm" type="button" aria-label="Próximo semestre" onClick={() => setPeriodo(andar(periodo, 1))}>
+      <button className="btn sm" type="button" aria-label="Próximo semestre" onClick={() => setPeriodo(andar(periodoAtual, 1))}>
         ›
       </button>
       {!noSemestreAtual && (
@@ -161,80 +184,222 @@ export default function Calendario({ busca }) {
         </div>
       )}
 
-      {form && <FormItem inicial={form} aoFechar={() => setForm(null)} />}
+      {aberto && (
+        <DetalheItem
+          id={aberto.id}
+          novo={aberto.novo}
+          aoAbrir={(id) => setAberto({ id })}
+          aoFechar={() => setAberto(null)}
+        />
+      )}
     </div>
   );
 }
 
-function FormItem({ inicial, aoFechar }) {
-  const novo = !inicial.id;
-  const [it, setIt] = useState({ ...inicial, mes: inicial.mes.slice(0, 7) });
+/* O item aberto: quem vê lê os detalhes e conversa; quem pode editar
+   aperta Editar para os campos virarem formulário. Item novo já abre no
+   formulário, e a conversa aparece depois de salvo. */
+function DetalheItem({ id, novo, aoAbrir, aoFechar }) {
+  const { itens, comentarios } = useCalendario();
+  const podeFazer = usePode();
+  const item = id ? itens.find((i) => i.id === id) : null;
+  const [editando, setEditando] = useState(!!novo);
+  const [rascunho, setRascunho] = useState(null);
+  const [excluindo, setExcluindo] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
-  const podeFazer = usePode();
+
+  /* Excluído por outra pessoa enquanto estava aberto. */
+  const sumiu = !!id && !item;
+  useEffect(() => {
+    if (sumiu) aoFechar();
+  }, [sumiu, aoFechar]);
+  if (sumiu) return null;
+
+  const base = item || {
+    titulo: "", mes: novo.mes, categoria: novo.categoria,
+    descricao: "", inicio: "", fim: "", local: "", link: "",
+  };
+  const d = editando
+    ? rascunho || { ...base, mes: base.mes.slice(0, 7), inicio: base.inicio || "", fim: base.fim || "" }
+    : base;
+  const muda = (patch) => setRascunho({ ...d, ...patch });
+  const cat = CAT[d.categoria] || CATEGORIAS[0];
+  const podeExcluir = !!item && podeFazer("calendario", "excluir");
+
+  function editar() {
+    setRascunho(null);
+    setErro("");
+    setEditando(true);
+  }
+
+  function cancelar() {
+    if (!item) return aoFechar();
+    setRascunho(null);
+    setEditando(false);
+    setErro("");
+  }
 
   async function salvar() {
-    if (!it.titulo.trim() || !it.mes) return;
+    if (!d.titulo.trim() || !d.mes) return;
     setSalvando(true);
-    const r = await salvarItem({ ...it, mes: it.mes + "-01" });
+    const r = await salvarItem({ ...d, id: item?.id, mes: d.mes + "-01" });
     setSalvando(false);
     if (!r.ok) return setErro(r.erro);
-    aoFechar();
+    setRascunho(null);
+    setEditando(false);
+    if (!item && r.id) aoAbrir(r.id);
   }
 
   async function excluir() {
-    setSalvando(true);
-    const r = await excluirItem(it.id);
-    setSalvando(false);
-    if (!r.ok) return setErro(r.erro);
+    const r = await excluirItem(item.id);
+    if (!r.ok) {
+      setExcluindo(false);
+      return setErro(r.erro);
+    }
     aoFechar();
   }
 
   return (
-    <Modal
-      titulo={novo ? "Novo item" : "Editar item"}
-      aoFechar={aoFechar}
-      acoes={
-        <>
-          {!novo && podeFazer("calendario", "excluir") && (
-            <button
-              className="btn sm ghost danger"
-              type="button"
-              style={{ marginRight: "auto" }}
-              disabled={salvando}
-              onClick={excluir}
-            >
-              Excluir
-            </button>
+    <>
+      <Modal
+        titulo={
+          <span className="tarefa-titulo-modal">
+            <span className="dot" style={{ background: "var(--cat)" }} />
+            {cat.label}
+          </span>
+        }
+        aoFechar={editando ? cancelar : aoFechar}
+        classe={"tarefa cal-det c-" + d.categoria + (item ? "" : " sem-painel")}
+        acoes={
+          <>
+            {podeExcluir && (
+              <button
+                className="btn sm ghost danger"
+                type="button"
+                style={{ marginRight: "auto" }}
+                onClick={() => setExcluindo(true)}
+              >
+                Excluir
+              </button>
+            )}
+            {erro && <div className="msg-erro" style={{ marginRight: "auto", marginTop: 0 }}>{erro}</div>}
+            {editando ? (
+              <>
+                <button className="btn ghost" type="button" onClick={cancelar}>
+                  Cancelar
+                </button>
+                <button
+                  className="btn primary"
+                  type="button"
+                  disabled={salvando || !d.titulo.trim() || !d.mes}
+                  onClick={salvar}
+                >
+                  {salvando ? "Salvando…" : "Salvar"}
+                </button>
+              </>
+            ) : (
+              <>
+                {podeFazer("calendario", "editar") && (
+                  <button className="btn" type="button" onClick={editar}>
+                    ✎ Editar
+                  </button>
+                )}
+                <button className="btn primary" type="button" onClick={aoFechar}>
+                  Fechar
+                </button>
+              </>
+            )}
+          </>
+        }
+      >
+        <div className="tarefa-grid">
+          <div className="tarefa-esq">
+            {editando ? <FormDetalhe d={d} muda={muda} salvar={salvar} /> : <VerDetalhe i={base} />}
+          </div>
+          {item && (
+            <aside className="tarefa-dir">
+              <Conversa
+                item={item}
+                lista={comentarios.filter((c) => c.item_id === item.id)}
+                podeComentar={podeFazer("calendario", "comentar")}
+              />
+            </aside>
           )}
-          {erro && <div className="msg-erro" style={{ marginRight: "auto", marginTop: 0 }}>{erro}</div>}
-          <button className="btn ghost" type="button" onClick={aoFechar}>
-            Cancelar
-          </button>
-          <button className="btn primary" type="button" onClick={salvar} disabled={salvando}>
-            {salvando ? "salvando…" : "Salvar"}
-          </button>
-        </>
-      }
-    >
-      <div className="field">
-        <label>Título</label>
-        <input
-          type="text"
-          autoFocus
-          value={it.titulo}
-          onChange={(e) => setIt({ ...it, titulo: e.target.value })}
-          onKeyDown={(e) => e.key === "Enter" && salvar()}
+        </div>
+      </Modal>
+
+      {excluindo && (
+        <Confirmar
+          mensagem={`Excluir “${base.titulo}” do calendário? Os comentários saem junto.`}
+          aoConfirmar={excluir}
+          aoFechar={() => setExcluindo(false)}
         />
-      </div>
+      )}
+    </>
+  );
+}
+
+function VerDetalhe({ i }) {
+  const quando = periodo(i);
+  return (
+    <div className="cal-ver">
+      <div className="cal-ver-mes">{nomeDoMes(i.mes)}</div>
+      <h2 className="cal-ver-titulo">{i.titulo}</h2>
+
+      {(quando || i.local || i.link) && (
+        <div className="cal-ver-fatos">
+          {quando && (
+            <div className="cal-fato">
+              <span className="cal-fato-k">Quando</span>
+              <span className="cal-fato-v">{quando}</span>
+            </div>
+          )}
+          {i.local && (
+            <div className="cal-fato">
+              <span className="cal-fato-k">Onde</span>
+              <span className="cal-fato-v">{i.local}</span>
+            </div>
+          )}
+          {i.link && (
+            <div className="cal-fato">
+              <span className="cal-fato-k">Link</span>
+              <a className="cal-fato-v" href={linkSeguro(i.link)} target="_blank" rel="noreferrer">
+                {i.link.replace(/^https?:\/\//i, "")}
+              </a>
+            </div>
+          )}
+        </div>
+      )}
+
+      {i.descricao && (
+        <>
+          <div className="tarefa-secao">Sobre</div>
+          <div className="cal-ver-desc">{i.descricao}</div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function FormDetalhe({ d, muda, salvar }) {
+  return (
+    <>
+      <input
+        className="tarefa-nome"
+        type="text"
+        autoFocus
+        value={d.titulo}
+        placeholder="Título"
+        onChange={(e) => muda({ titulo: e.target.value })}
+        onKeyDown={(e) => e.key === "Enter" && salvar()}
+      />
+
+      <div className="tarefa-secao">Detalhes</div>
       <div className="f-row">
         <div className="field">
-          <label>Mês</label>
-          <input type="month" value={it.mes} onChange={(e) => setIt({ ...it, mes: e.target.value })} />
-        </div>
-        <div className="field">
           <label>Categoria</label>
-          <select value={it.categoria} onChange={(e) => setIt({ ...it, categoria: e.target.value })}>
+          <select value={d.categoria} onChange={(e) => muda({ categoria: e.target.value })}>
             {CATEGORIAS.map((c) => (
               <option key={c.key} value={c.key}>
                 {c.label}
@@ -242,7 +407,122 @@ function FormItem({ inicial, aoFechar }) {
             ))}
           </select>
         </div>
+        <div className="field">
+          <label>Mês</label>
+          <input type="month" value={d.mes} onChange={(e) => muda({ mes: e.target.value })} />
+        </div>
       </div>
-    </Modal>
+      <div className="f-row">
+        <div className="field">
+          <label>Início</label>
+          <input type="date" value={d.inicio || ""} onChange={(e) => muda({ inicio: e.target.value })} />
+        </div>
+        <div className="field">
+          <label>Fim</label>
+          <input type="date" value={d.fim || ""} onChange={(e) => muda({ fim: e.target.value })} />
+        </div>
+      </div>
+      <div className="f-row">
+        <div className="field">
+          <label>Local</label>
+          <input type="text" value={d.local || ""} onChange={(e) => muda({ local: e.target.value })} />
+        </div>
+        <div className="field">
+          <label>Link</label>
+          <input type="text" value={d.link || ""} onChange={(e) => muda({ link: e.target.value })} />
+        </div>
+      </div>
+
+      <div className="tarefa-secao">Sobre</div>
+      <div className="field">
+        <textarea
+          className="tarefa-notas"
+          value={d.descricao || ""}
+          onChange={(e) => muda({ descricao: e.target.value })}
+        />
+      </div>
+    </>
+  );
+}
+
+/* A conversa do item: mesmo balão e mesmas regras do kanban de marca. */
+const API_COMENT = { editar: editarComentarioItem, excluir: excluirComentarioItem };
+
+function Conversa({ item, lista, podeComentar }) {
+  const auth = useAuth();
+  const { eu } = usePermissoes();
+  const perfil = auth.perfil;
+  const [texto, setTexto] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  async function enviar() {
+    if (!texto.trim() || enviando) return;
+    setEnviando(true);
+    setErro("");
+    const r = await comentarItem(item.id, texto);
+    setEnviando(false);
+    if (!r.ok) return setErro(r.erro);
+    setTexto("");
+  }
+
+  /* Mais recente em cima, como no kanban. */
+  const recentes = [...lista].reverse();
+
+  return (
+    <div className="painel">
+      <div className="tarefa-secao painel-titulo">
+        Comentários
+        {lista.length > 0 && <span className="painel-n">{lista.length}</span>}
+      </div>
+
+      {erro && <div className="banner" style={{ borderColor: "var(--danger)" }}>{erro}</div>}
+
+      {podeComentar && (
+        <div className="coment-novo">
+          <Avatar email={perfil?.email} nome={perfil?.nome} />
+          <div className="coment-novo-caixa">
+            <textarea
+              value={texto}
+              placeholder="Escreva um comentário…"
+              onChange={(e) => setTexto(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  enviar();
+                }
+              }}
+            />
+            <div className="coment-novo-pe">
+              <button className="btn sm primary" type="button" disabled={!texto.trim() || enviando} onClick={enviar}>
+                {enviando ? "Enviando…" : "Comentar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {recentes.length > 0 && (
+        <ul className="coment-lista">
+          {recentes.map((c) => (
+            <Comentario
+              key={c.id + (c.editado_em || "")}
+              e={{
+                id: c.id,
+                texto: c.texto,
+                autor: c.autor,
+                autorNome: c.autor_nome,
+                em: c.criado_em,
+                editadoEm: c.editado_em,
+              }}
+              meuEmail={perfil?.email}
+              souAdmin={!!eu?.admin}
+              aoMudar={() => {}}
+              api={API_COMENT}
+            />
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

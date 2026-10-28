@@ -1324,3 +1324,27 @@
   .cal-itens { position: relative; display: flex; flex-wrap: wrap; gap: 5px; }
   .cal-itens .cal-item { width: auto; }
   .cal-itens .cal-add { position: static; opacity: 1; height: 26px; width: 26px; }
+
+  /* detalhe do item do calendário (usa o modal .tarefa do kanban) */
+  .modal.tarefa.cal-det { border-top-color: var(--cat); }
+  .modal.tarefa.cal-det .tarefa-secao::before { background: var(--cat); }
+  .cal-item-n {
+    display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px;
+    font-size: 0.68rem; font-weight: 700; color: var(--text-dim); background: var(--surface);
+  }
+  .cal-ver-mes {
+    font-size: 0.76rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--text-dim);
+  }
+  .cal-ver-titulo { margin: 6px 0 4px; font-size: 1.5rem; line-height: 1.2; font-weight: 800; color: var(--text); }
+  .cal-ver-fatos {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-top: 18px;
+  }
+  .cal-fato {
+    display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border-radius: 10px;
+    background: color-mix(in srgb, var(--cat) 12%, var(--surface)); border-left: 3px solid var(--cat);
+  }
+  .cal-fato-k { font-size: 0.66rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim); }
+  .cal-fato-v { font-size: 0.9rem; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+  a.cal-fato-v { color: var(--accent-text); text-decoration: none; }
+  a.cal-fato-v:hover { text-decoration: underline; }
+  .cal-ver-desc { font-size: 0.92rem; line-height: 1.55; color: var(--text); white-space: pre-wrap; }
