@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useEstado, alterar } from "../lib/estado.js";
 import { CATEGORIAS_MATERIAL, GRUPOS_GUIA } from "../lib/constantes.js";
 import Modal, { Confirmar } from "../componentes/Modal.jsx";
-import { buscarArquivo, rasterizarParaPng } from "../lib/arquivos.js";
+import { buscarArquivo, copiarImagem } from "../lib/arquivos.js";
 import { usePode } from "../lib/permissoes.js";
 import {
   useCentral,
@@ -303,17 +303,17 @@ function ImagensGuipa({ busca }) {
     setAviso(problemas.join(" · "));
   }
 
+  const [copiando, setCopiando] = useState({});
+
   async function copiar(item) {
-    if (!navigator.clipboard || typeof ClipboardItem === "undefined") {
-      setAviso("Este navegador não copia imagem para a área de transferência.");
-      return;
-    }
+    setCopiando((c) => ({ ...c, [item.id]: "copiando…" }));
     try {
-      const png = await rasterizarParaPng(await baixarImagem(item.caminho));
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+      await copiarImagem(() => baixarImagem(item.caminho));
+      setCopiando((c) => ({ ...c, [item.id]: "copiada ✓" }));
     } catch (e) {
       setAviso("Não consegui copiar: " + (e.message || "erro"));
     }
+    setTimeout(() => setCopiando(({ [item.id]: _, ...resto }) => resto), 1600);
   }
 
   const lista = central.imagens.filter((i) =>
@@ -378,8 +378,8 @@ function ImagensGuipa({ busca }) {
                 </div>
               )}
               <div className="midia-acoes">
-                <button className="btn sm" type="button" onClick={() => copiar(i)}>
-                  Copiar
+                <button className="btn sm" type="button" disabled={!!copiando[i.id]} onClick={() => copiar(i)}>
+                  {copiando[i.id] || "Copiar"}
                 </button>
                 <button
                   className="btn sm"

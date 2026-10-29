@@ -101,4 +101,17 @@ export function rasterizarParaPng(blob) {
   });
 }
 
+/* Copia a imagem para a área de transferência. O write sai já no clique,
+   com o PNG ainda por vir: esperar o download antes de chamar deixa o
+   clique "vencer", e o navegador recusa (Document is not focused). */
+export function copiarImagem(obterBlob) {
+  if (!navigator.clipboard || typeof ClipboardItem === "undefined") {
+    return Promise.reject(new Error("este navegador não copia imagem"));
+  }
+  const png = Promise.resolve()
+    .then(obterBlob)
+    .then((b) => (b.type === "image/png" ? b : rasterizarParaPng(b)));
+  return navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+}
+
 export const LIMITE_BYTES = 25 * 1024 * 1024;

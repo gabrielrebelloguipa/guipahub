@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../lib/useAuth.js";
 import { pode } from "../lib/permissoes.js";
 import { pedirToken } from "../lib/auth.js";
+import { copiarImagem } from "../lib/arquivos.js";
 import {
   verificarAcesso,
   aquecerArvore,
@@ -27,31 +28,6 @@ const PAGINA = 60;
 /* Tempo de silêncio antes de ir ao Drive. Buscar a cada tecla seria uma
    chamada por letra: lento para quem digita e desperdício de cota. */
 const ESPERA_MS = 400;
-
-/* Rasteriza qualquer imagem para PNG antes de copiar. Converter sempre,
-   em vez de tentar o mime original, evita depender do que cada navegador
-   aceita caso a caso — e SVG não é copiável como imagem sem isso. */
-function rasterizarParaPng(blob) {
-  return new Promise((ok, falha) => {
-    const url = URL.createObjectURL(blob);
-    const img = new Image();
-    img.onload = () => {
-      const cv = document.createElement("canvas");
-      cv.width = img.naturalWidth || 1;
-      cv.height = img.naturalHeight || 1;
-      cv.getContext("2d").drawImage(img, 0, 0);
-      cv.toBlob((png) => {
-        URL.revokeObjectURL(url);
-        png ? ok(png) : falha(new Error("não consegui converter a imagem"));
-      }, "image/png");
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      falha(new Error("arquivo não é uma imagem válida"));
-    };
-    img.src = url;
-  });
-}
 
 function AvisoDeAcesso() {
   const auth = useAuth();
@@ -354,13 +330,8 @@ export default function Imagens({ busca }) {
   }, [termo]);
 
   const copiar = useCallback(async (f) => {
-    if (!navigator.clipboard || typeof ClipboardItem === "undefined") {
-      setErro("Este navegador não copia imagem para a área de transferência.");
-      return;
-    }
     try {
-      const png = await rasterizarParaPng(await baixarBlob(f));
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+      await copiarImagem(() => baixarBlob(f));
     } catch (e) {
       setErro("Não consegui copiar: " + (e.message || "erro"));
     }
