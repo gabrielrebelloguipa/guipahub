@@ -4,6 +4,20 @@ import { CATEGORIAS_MATERIAL, GRUPOS_GUIA } from "../lib/constantes.js";
 import Modal, { Confirmar } from "../componentes/Modal.jsx";
 import { buscarArquivo, copiarImagem } from "../lib/arquivos.js";
 import { usePode } from "../lib/permissoes.js";
+import { useAuth } from "../lib/useAuth.js";
+import {
+  acharPastaNaRaiz,
+  listarFilhos,
+  listarMidias,
+  baixarBlob,
+  ehImagem,
+  ehVideo,
+  extensaoDe,
+  miniatura,
+  fmtBytes,
+  linkDaPasta,
+  linkDeDownload,
+} from "../lib/drive.js";
 import {
   useCentral,
   iniciarCentral,
@@ -49,6 +63,59 @@ function ErroBanco({ erro }) {
 }
 
 /* ---------- Materiais ---------- */
+
+/* ---------- o que mora no Drive ---------- */
+
+/* Imagens e materiais agora vivem em duas pastas do 07. Design, e quem
+   sobe é quem tem acesso a elas no Drive. O que ainda está no Supabase
+   continua aparecendo até ter uma cópia de mesmo nome lá. */
+const PASTA_IMAGENS = "Imagens de Refer";
+const PASTA_MATERIAIS = "Materiais de Apoio";
+
+const semExt = (n) => String(n || "").replace(/\.[^.]+$/, "").trim();
+const chave = (n) => semExt(n).toLowerCase();
+
+async function lerPasta(trecho, fundo) {
+  const pasta = await acharPastaNaRaiz(trecho);
+  if (!pasta) return null;
+  if (fundo) {
+    const r = await listarMidias(pasta.id);
+    return { pasta, arquivos: r.arquivos.filter((f) => ehImagem(f) || ehVideo(f)), pastas: [] };
+  }
+  const r = await listarFilhos(pasta.id);
+  return { pasta, arquivos: r.arquivos, pastas: r.pastas };
+}
+
+function useDriveCentral() {
+  const auth = useAuth();
+  const [d, setD] = useState({ carregando: true, erro: "", imagens: null, materiais: null });
+  const semAcesso = auth.expirou || auth.acessoDrive === false;
+  useEffect(() => {
+    if (semAcesso) {
+      setD({ carregando: false, erro: "", imagens: null, materiais: null });
+      return;
+    }
+    let vivo = true;
+    Promise.all([lerPasta(PASTA_IMAGENS, true), lerPasta(PASTA_MATERIAIS, false)])
+      .then(([imagens, materiais]) => vivo && setD({ carregando: false, erro: "", imagens, materiais }))
+      .catch((e) => vivo && setD({ carregando: false, erro: "Drive: " + (e.message || "erro"), imagens: null, materiais: null }));
+    return () => {
+      vivo = false;
+    };
+  }, [semAcesso]);
+  return d;
+}
+
+/* Um por vez: o navegador recusa vários downloads disparados juntos. */
+async function baixarEmFila(itens, baixar, aoErro) {
+  for (const i of itens) {
+    try {
+      await baixar(i);
+    } catch (e) {
+      aoErro(e.message || "erro");
+    }
+  }
+}
 
 function FormMaterial({ inicial, aoFechar }) {
   const novo = !inicial;
@@ -136,22 +203,41 @@ function FormMaterial({ inicial, aoFechar }) {
   );
 }
 
-function Materiais({ busca }) {
+function Materiais({ busca, drive }) {
   const central = useCentral();
   const estado = useEstado();
   const podeFazer = usePode();
   const [editando, setEditando] = useState(null);
   const [criando, setCriando] = useState(false);
   const [excluindo, setExcluindo] = useState(null);
+  const [limpando, setLimpando] = useState(false);
+  const [baixando, setBaixando] = useState(false);
   const [erro, setErro] = useState("");
+
+  const noDrive = drive.materiais;
+  const nomesDrive = new Set([
+    ...(noDrive?.arquivos || []).map((f) => chave(f.name)),
+    ...(noDrive?.pastas || []).map((p) => chave(p.nome)),
+  ]);
+  /* Material com arquivo que já tem cópia no Drive sai da lista. */
+  const jaNoDrive = (m) => m.caminho && (nomesDrive.has(chave(m.arquivo_nome)) || nomesDrive.has(chave(m.nome)));
+  const copias = central.materiais.filter(jaNoDrive);
+  const aMover = central.materiais.filter((m) => m.caminho && !jaNoDrive(m));
+  const casa = (txt) => (busca ? txt.toLowerCase().includes(busca.toLowerCase()) : true);
 
   /* O filtro de categoria continua sendo preferência de quem olha, então
      fica no estado pessoal; o conteúdo é que agora é do time. */
   const lista = central.materiais
+    .filter((m) => !jaNoDrive(m))
     .filter((m) => (estado.filtroCat ? m.categoria === estado.filtroCat : true))
-    .filter((m) =>
-      busca ? (m.nome + " " + (m.notas || "")).toLowerCase().includes(busca.toLowerCase()) : true
-    );
+    .filter((m) => casa(m.nome + " " + (m.notas || "")));
+  const daPasta = estado.filtroCat
+    ? { arquivos: [], pastas: [] }
+    : {
+        pastas: (noDrive?.pastas || []).filter((p) => casa(p.nome)),
+        arquivos: (noDrive?.arquivos || []).filter((f) => casa(f.name)),
+      };
+  const vazio = !lista.length && !daPasta.arquivos.length && !daPasta.pastas.length;
 
   return (
     <>
@@ -178,23 +264,80 @@ function Materiais({ busca }) {
           );
         })}
         {podeFazer("central", "criar") && (
-          <button
-            className="btn primary sm"
-            type="button"
-            style={{ marginLeft: "auto" }}
-            onClick={() => setCriando(true)}
-          >
-            ＋ Material
-          </button>
+          <div className="chips-fim">
+            {aMover.length > 0 && (
+              <button
+                className="btn sm"
+                type="button"
+                disabled={baixando}
+                onClick={async () => {
+                  setBaixando(true);
+                  await baixarEmFila(aMover, (m) => baixarArquivo(m.caminho, m.arquivo_nome), setErro);
+                  setBaixando(false);
+                }}
+              >
+                {baixando ? "baixando…" : `Baixar do Supabase (${aMover.length})`}
+              </button>
+            )}
+            {copias.length > 0 && podeFazer("central", "excluir") && (
+              <button className="btn sm ghost danger" type="button" onClick={() => setLimpando(true)}>
+                Apagar cópias antigas ({copias.length})
+              </button>
+            )}
+            {noDrive && (
+              <a className="btn sm" href={linkDaPasta(noDrive.pasta.id)} target="_blank" rel="noopener">
+                Pasta no Drive ↗
+              </a>
+            )}
+            <button className="btn primary sm" type="button" onClick={() => setCriando(true)}>
+              ＋ Material
+            </button>
+          </div>
         )}
       </div>
 
-      <ErroBanco erro={erro} />
+      <ErroBanco erro={erro || drive.erro} />
 
-      {!lista.length ? (
-        <div className="empty">Nenhum material.</div>
+      {vazio ? (
+        <div className="empty">{drive.carregando ? "Carregando…" : "Nenhum material."}</div>
       ) : (
         <div className="list">
+          {daPasta.pastas.map((p) => (
+            <div className="row" key={p.id} style={{ cursor: "default" }}>
+              <div className="bar" style={{ background: "var(--accent)" }} />
+              <div className="body">
+                <div className="ttl">{p.nome}</div>
+                <div className="meta">
+                  <span>Pasta</span>
+                </div>
+              </div>
+              <div className="right">
+                <a className="btn sm" href={linkDaPasta(p.id)} target="_blank" rel="noopener">
+                  Abrir
+                </a>
+              </div>
+            </div>
+          ))}
+          {daPasta.arquivos.map((f) => (
+            <div className="row" key={f.id} style={{ cursor: "default" }}>
+              <div className="bar" style={{ background: "var(--accent)" }} />
+              <div className="body">
+                <div className="ttl">{semExt(f.name)}</div>
+                <div className="meta">
+                  <span>{extensaoDe(f)}</span>
+                  {f.size && <span>{fmtBytes(f.size)}</span>}
+                </div>
+              </div>
+              <div className="right">
+                <a className="btn sm" href={linkDeDownload(f)} target="_blank" rel="noopener">
+                  Baixar
+                </a>
+                <a className="btn sm" href={f.webViewLink} target="_blank" rel="noopener">
+                  Abrir
+                </a>
+              </div>
+            </div>
+          ))}
           {lista.map((m) => (
             <div className="row" key={m.id} style={{ cursor: "default" }}>
               <div className="bar" style={{ background: "var(--accent)" }} />
@@ -249,6 +392,18 @@ function Materiais({ busca }) {
           aoFechar={() => setExcluindo(null)}
         />
       )}
+      {limpando && (
+        <Confirmar
+          mensagem={`Apagar do Supabase ${copias.length} material(is) que já estão no Drive?`}
+          aoConfirmar={async () => {
+            for (const m of copias) {
+              const r = await excluirMaterial(m);
+              if (!r.ok) setErro(r.erro);
+            }
+          }}
+          aoFechar={() => setLimpando(false)}
+        />
+      )}
     </>
   );
 }
@@ -271,13 +426,15 @@ function Miniatura({ caminho, alt, temMini }) {
   return <img src={url} alt={alt} loading="lazy" />;
 }
 
-function ImagensGuipa({ busca }) {
+function ImagensGuipa({ busca, drive }) {
   const central = useCentral();
   const podeFazer = usePode();
   const [excluindo, setExcluindo] = useState(null);
   const [aviso, setAviso] = useState("");
   const [enviando, setEnviando] = useState(0);
   const [renomeando, setRenomeando] = useState(null);
+  const [limpando, setLimpando] = useState(false);
+  const [baixando, setBaixando] = useState(false);
   const podeSubir = podeFazer("central", "criar");
   const faltaMini = central.imagens.some((i) => !central.minis.has(caminhoMini(i.caminho)));
 
@@ -305,26 +462,54 @@ function ImagensGuipa({ busca }) {
 
   const [copiando, setCopiando] = useState({});
 
-  async function copiar(item) {
-    setCopiando((c) => ({ ...c, [item.id]: "copiando…" }));
+  async function copiar(id, obter) {
+    setCopiando((c) => ({ ...c, [id]: "copiando…" }));
     try {
-      await copiarImagem(() => baixarImagem(item.caminho));
-      setCopiando((c) => ({ ...c, [item.id]: "copiada ✓" }));
+      await copiarImagem(obter);
+      setCopiando((c) => ({ ...c, [id]: "copiada ✓" }));
     } catch (e) {
       setAviso("Não consegui copiar: " + (e.message || "erro"));
     }
-    setTimeout(() => setCopiando(({ [item.id]: _, ...resto }) => resto), 1600);
+    setTimeout(() => setCopiando(({ [id]: _, ...resto }) => resto), 1600);
   }
 
-  const lista = central.imagens.filter((i) =>
-    busca ? i.nome.toLowerCase().includes(busca.toLowerCase()) : true
-  );
+  const casa = (txt) => (busca ? txt.toLowerCase().includes(busca.toLowerCase()) : true);
+  const noDrive = drive.imagens;
+  const nomesDrive = new Set((noDrive?.arquivos || []).map((f) => chave(f.name)));
+  const copias = central.imagens.filter((i) => nomesDrive.has(chave(i.nome)));
+  const lista = central.imagens.filter((i) => !nomesDrive.has(chave(i.nome)) && casa(i.nome));
+  const daPasta = (noDrive?.arquivos || []).filter((f) => casa(f.name));
+  const extDe = (i) => i.caminho.split(".").pop() || "png";
 
   return (
     <>
 
-      {podeFazer("central", "criar") && (
+      {podeSubir && (
         <div className="chips">
+          {lista.length > 0 && (
+            <button
+              className="btn sm"
+              type="button"
+              disabled={baixando}
+              onClick={async () => {
+                setBaixando(true);
+                await baixarEmFila(lista, (i) => baixarArquivo(i.caminho, i.nome + "." + extDe(i)), setAviso);
+                setBaixando(false);
+              }}
+            >
+              {baixando ? "baixando…" : `Baixar do Supabase (${lista.length})`}
+            </button>
+          )}
+          {copias.length > 0 && podeFazer("central", "excluir") && (
+            <button className="btn sm ghost danger" type="button" onClick={() => setLimpando(true)}>
+              Apagar cópias antigas ({copias.length})
+            </button>
+          )}
+          {noDrive && (
+            <a className="btn sm" href={linkDaPasta(noDrive.pasta.id)} target="_blank" rel="noopener">
+              Pasta no Drive ↗
+            </a>
+          )}
           <label className="btn primary sm" style={{ cursor: "pointer" }}>
             {enviando ? `enviando… (${enviando})` : "＋ Adicionar imagens"}
             <input
@@ -343,11 +528,41 @@ function ImagensGuipa({ busca }) {
       )}
 
       {aviso && <div className="banner">{aviso}</div>}
+      <ErroBanco erro={drive.erro} />
 
-      {!lista.length ? (
-        <div className="empty">Nenhuma imagem ainda.</div>
+      {!lista.length && !daPasta.length ? (
+        <div className="empty">{drive.carregando ? "Carregando…" : "Nenhuma imagem ainda."}</div>
       ) : (
         <div className="grid g-assets">
+          {daPasta.map((f) => (
+            <div className="midia" key={f.id}>
+              <div className="midia-img">
+                <img src={miniatura(f, 400)} alt={f.name} loading="lazy" referrerPolicy="no-referrer" />
+              </div>
+              <div className="midia-nome" title={f.name}>
+                {semExt(f.name)}
+              </div>
+              <div className="midia-acoes">
+                {ehImagem(f) ? (
+                  <button
+                    className="btn sm"
+                    type="button"
+                    disabled={!!copiando[f.id]}
+                    onClick={() => copiar(f.id, () => baixarBlob(f))}
+                  >
+                    {copiando[f.id] || "Copiar"}
+                  </button>
+                ) : (
+                  <a className="btn sm" href={f.webViewLink} target="_blank" rel="noopener">
+                    Abrir
+                  </a>
+                )}
+                <a className="btn sm" href={linkDeDownload(f)} target="_blank" rel="noopener">
+                  Baixar
+                </a>
+              </div>
+            </div>
+          ))}
           {lista.map((i) => (
             <div className="midia" key={i.id}>
               <div className="midia-img">
@@ -378,14 +593,14 @@ function ImagensGuipa({ busca }) {
                 </div>
               )}
               <div className="midia-acoes">
-                <button className="btn sm" type="button" disabled={!!copiando[i.id]} onClick={() => copiar(i)}>
+                <button className="btn sm" type="button" disabled={!!copiando[i.id]} onClick={() => copiar(i.id, () => baixarImagem(i.caminho))}>
                   {copiando[i.id] || "Copiar"}
                 </button>
                 <button
                   className="btn sm"
                   type="button"
                   onClick={() =>
-                    baixarArquivo(i.caminho, i.nome + "." + (i.caminho.split(".").pop() || "png")).catch((e) =>
+                    baixarArquivo(i.caminho, i.nome + "." + extDe(i)).catch((e) =>
                       setAviso("Não consegui baixar: " + e.message)
                     )
                   }
@@ -411,6 +626,18 @@ function ImagensGuipa({ busca }) {
             if (!r.ok) setAviso(r.erro);
           }}
           aoFechar={() => setExcluindo(null)}
+        />
+      )}
+      {limpando && (
+        <Confirmar
+          mensagem={`Apagar do Supabase ${copias.length} imagem(ns) que já estão no Drive?`}
+          aoConfirmar={async () => {
+            for (const i of copias) {
+              const r = await excluirImagem(i);
+              if (!r.ok) setAviso(r.erro);
+            }
+          }}
+          aoFechar={() => setLimpando(false)}
         />
       )}
     </>
@@ -748,6 +975,7 @@ function Secao({ titulo, sub, children }) {
 
 export default function Central({ busca }) {
   const central = useCentral();
+  const drive = useDriveCentral();
   useEffect(() => {
     iniciarCentral();
   }, []);
@@ -760,11 +988,11 @@ export default function Central({ busca }) {
       <ErroBanco erro={central.erro} />
 
       <Secao titulo="Materiais">
-        <Materiais busca={busca} />
+        <Materiais busca={busca} drive={drive} />
       </Secao>
 
       <Secao titulo="Imagens GUIPA">
-        <ImagensGuipa busca={busca} />
+        <ImagensGuipa busca={busca} drive={drive} />
       </Secao>
 
       <Secao titulo="Guias e medidas">

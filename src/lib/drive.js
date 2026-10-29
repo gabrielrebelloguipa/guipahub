@@ -531,6 +531,45 @@ export function buscarPastas(termo) {
   });
 }
 
+/* Pasta do acervo pelo nome, para a Central: "Imagens de Refer" acha
+   "0 - Imagens de Referência" com ou sem acento no fim. Só vale pasta de
+   dentro da raiz; filha direta da raiz ganha de uma homônima mais funda. */
+const pastaPorTrecho = new Map();
+export function acharPastaNaRaiz(trecho) {
+  if (pastaPorTrecho.has(trecho)) return Promise.resolve(pastaPorTrecho.get(trecho));
+  return comTokenAsync(async () => {
+    const raiz = raizConfigurada();
+    if (!raiz) return null;
+    const esc = await escopo();
+    const r = await pedir("files", {
+      ...esc,
+      q: `mimeType='${PASTA}' and trashed=false and name contains '${escapaQ(trecho)}'`,
+      fields: "files(id,name,parents)",
+      pageSize: 20,
+    });
+    const lista = r.files || [];
+    let achada = lista.find((f) => f.parents?.[0] === raiz) || null;
+    if (!achada) {
+      for (const f of lista) {
+        if (await dentroDaRaiz(f, raiz)) { achada = f; break; }
+      }
+    }
+    const valor = achada ? { id: achada.id, nome: achada.name } : null;
+    if (valor) pastaPorTrecho.set(trecho, valor);
+    return valor;
+  });
+}
+
+export function linkDaPasta(id) {
+  return `https://drive.google.com/drive/folders/${id}`;
+}
+
+/* Download pelo próprio Drive: arquivo grande (vídeo de 200 MB) não
+   passa pela memória da página. */
+export function linkDeDownload(f) {
+  return `https://drive.google.com/uc?export=download&id=${f.id}`;
+}
+
 /* ---------- varrer uma pasta inteira ---------- */
 
 /* Tudo que é imagem ou vídeo abaixo desta pasta, em qualquer
