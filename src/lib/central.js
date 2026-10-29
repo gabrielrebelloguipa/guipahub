@@ -13,7 +13,7 @@ const BUCKET = "central";
 const VIDA_LINK_S = 3600;
 const RENOVA_LINK_MS = 50 * 60 * 1000;
 
-let estado = { materiais: [], guias: [], imagens: [], carregando: true, erro: "" };
+let estado = { materiais: [], guias: [], imagens: [], minis: new Set(), carregando: true, erro: "" };
 const ouvintes = new Set();
 
 function definir(patch) {
@@ -41,10 +41,11 @@ async function carregar() {
   /* Paginado como o resto (ver todas() em supabase.js): a Central não
      deve passar de mil itens tão cedo, mas no dia em que passar, cortar
      em silêncio seria o mesmo bug que sumiu com a coluna Concluído. */
-  const [rm, rg, ri] = await Promise.all([
+  const [rm, rg, ri, rmini] = await Promise.all([
     todas(() => supabase.from("central_materiais").select("*").order("nome").order("id")),
     todas(() => supabase.from("central_guias").select("*").order("titulo").order("id")),
     todas(() => supabase.from("central_imagens").select("*").order("criado_em", { ascending: false }).order("id")),
+    supabase.storage.from(BUCKET).list("mini", { limit: 1000 }),
   ]);
   const err = rm.error || rg.error || ri.error;
   if (err) {
@@ -63,6 +64,8 @@ async function carregar() {
       return { ...g, specs, pendente: !specs.length || specs.some((x) => !String(x.v || "").trim()) };
     }),
     imagens: ri.data || [],
+    /* Miniatura que não deu para listar só faz a grade cair no original. */
+    minis: new Set((rmini.data || []).map((o) => `mini/${o.name}`)),
     carregando: false,
     erro: "",
   });
@@ -185,6 +188,7 @@ export async function subirImagem(arquivo, nome) {
     upsert: false,
   });
   if (up.error) return { ok: false, erro: explicarErro(up.error) };
+  await subirMini(caminho, arquivo);
   const { error } = await supabase.from("central_imagens").insert({
     nome: (nome || arquivo.name || "imagem").replace(/\.[^.]+$/, ""),
     caminho,
@@ -208,9 +212,74 @@ export function renomearImagem(id, nome) {
    contrário deixaria na tela uma imagem quebrada. */
 export async function excluirImagem(img) {
   const r = await feito(supabase.from("central_imagens").delete().eq("id", img.id));
-  if (r.ok) await supabase.storage.from(BUCKET).remove([img.caminho]);
+  if (r.ok) await supabase.storage.from(BUCKET).remove([img.caminho, caminhoMini(img.caminho)]);
   liberarLink(img.caminho);
   return r;
+}
+
+/* ---------- miniaturas ---------- */
+
+/* A grade mostrava o original, e alguns passam de 20 MB: abrir a aba era
+   baixar a Central inteira. Cada imagem ganha uma cópia pequena em
+   mini/, com o mesmo nome; o original só desce para Copiar e Baixar. */
+const LADO_MINI = 480;
+
+export function caminhoMini(caminho) {
+  return caminho.replace(/^img\//, "mini/").replace(/\.[^./]+$/, "") + ".webp";
+}
+
+async function gerarMini(blob) {
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const w = img.naturalWidth || LADO_MINI;
+    const h = img.naturalHeight || LADO_MINI;
+    const k = Math.min(1, LADO_MINI / Math.max(w, h));
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.round(w * k));
+    c.height = Math.max(1, Math.round(h * k));
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    return await new Promise((ok) => c.toBlob(ok, "image/webp", 0.82));
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/* Falhar aqui não impede nada: sem miniatura, a grade usa o original. */
+async function subirMini(caminho, blob) {
+  try {
+    const mini = await gerarMini(blob);
+    if (!mini) return false;
+    const destino = caminhoMini(caminho);
+    const { error } = await supabase.storage.from(BUCKET).upload(destino, mini, {
+      contentType: "image/webp",
+      upsert: false,
+    });
+    if (error && !/exists|duplicate/i.test(error.message || "")) return false;
+    definir({ minis: new Set([...estado.minis, destino]) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/* Imagens que subiram antes das miniaturas: quem pode subir na Central
+   gera as que faltam, uma por vez, ao abrir a aba. */
+let completando = false;
+export async function completarMiniaturas() {
+  if (completando) return;
+  completando = true;
+  try {
+    for (const img of estado.imagens) {
+      if (estado.minis.has(caminhoMini(img.caminho))) continue;
+      const { data, error } = await supabase.storage.from(BUCKET).download(img.caminho);
+      if (!error && data) await subirMini(img.caminho, data);
+    }
+  } finally {
+    completando = false;
+  }
 }
 
 /* Link assinado por caminho, guardado até perto de vencer: a grade de

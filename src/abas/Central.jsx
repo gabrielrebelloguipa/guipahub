@@ -15,6 +15,8 @@ import {
   renomearImagem,
   excluirImagem,
   linkDaImagem,
+  caminhoMini,
+  completarMiniaturas,
   baixarImagem,
   baixarArquivo,
   enviarDoNavegador,
@@ -255,15 +257,16 @@ function Materiais({ busca }) {
 
 /* Link assinado do bucket privado: a imagem só abre para quem está
    logado com conta da GUIPA, mesmo que alguém copie o endereço. */
-function Miniatura({ caminho, alt }) {
+function Miniatura({ caminho, alt, temMini }) {
   const [url, setUrl] = useState("");
+  const alvo = temMini ? caminhoMini(caminho) : caminho;
   useEffect(() => {
     let vivo = true;
-    linkDaImagem(caminho).then((u) => vivo && setUrl(u));
+    linkDaImagem(alvo).then((u) => vivo && setUrl(u));
     return () => {
       vivo = false;
     };
-  }, [caminho]);
+  }, [alvo]);
   if (!url) return <div className="midia-sem">carregando…</div>;
   return <img src={url} alt={alt} loading="lazy" />;
 }
@@ -275,6 +278,12 @@ function ImagensGuipa({ busca }) {
   const [aviso, setAviso] = useState("");
   const [enviando, setEnviando] = useState(0);
   const [renomeando, setRenomeando] = useState(null);
+  const podeSubir = podeFazer("central", "criar");
+  const faltaMini = central.imagens.some((i) => !central.minis.has(caminhoMini(i.caminho)));
+
+  useEffect(() => {
+    if (podeSubir && faltaMini) completarMiniaturas();
+  }, [podeSubir, faltaMini]);
 
   async function processar(arquivos) {
     const problemas = [];
@@ -342,7 +351,7 @@ function ImagensGuipa({ busca }) {
           {lista.map((i) => (
             <div className="midia" key={i.id}>
               <div className="midia-img">
-                <Miniatura caminho={i.caminho} alt={i.nome} />
+                <Miniatura caminho={i.caminho} alt={i.nome} temMini={central.minis.has(caminhoMini(i.caminho))} />
               </div>
               {renomeando === i.id ? (
                 <input
